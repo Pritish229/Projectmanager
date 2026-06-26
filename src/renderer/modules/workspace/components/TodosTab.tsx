@@ -505,7 +505,7 @@ export function TodosTab({ projectId, isReadOnly }: TodosTabProps) {
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setShowCreateModal(false)} />
-          <div className="relative w-full max-w-lg mx-4 bg-card rounded-xl border shadow-2xl p-6 animate-scale-in max-h-[90vh] overflow-y-auto">
+          <div className="relative w-full max-w-2xl mx-4 bg-card rounded-xl border shadow-2xl p-6 animate-scale-in max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-foreground">
                 {editingTodoId ? 'Edit Task Details' : 'Create New Task'}

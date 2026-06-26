@@ -1,5 +1,5 @@
 {
-  "version": "1.0.1",
+  "version": "1.0.2",
   "url": "https://github.com/Pritish229/Projectmanager/releases/download/v1.0.1/Project-Workspace-Manager-Setup-1.0.1.exe",
   "releaseNotes": "Initial release with the following updates:\n- Fixed z-index position of option dropdowns on completed tasks\n- Added Application Update section in general settings (local + remote)\n- Wipes SQLite database and local storage files on application uninstallation"
 }

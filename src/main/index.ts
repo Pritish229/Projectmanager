@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell, Menu, MenuItem } from 'electron'
 import { join, delimiter } from 'path'
 import { Module } from 'module'
 
@@ -29,7 +29,8 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      spellcheck: true
     }
   })
 
@@ -41,6 +42,97 @@ function createWindow(): void {
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
+  })
+
+  // Set up spellcheck spelling fixes & standard editing context menu
+  mainWindow.webContents.on('context-menu', (_, params) => {
+    const menu = new Menu()
+
+    // Spelling suggestions
+    if (params.dictionarySuggestions && params.dictionarySuggestions.length > 0) {
+      for (const suggestion of params.dictionarySuggestions) {
+        menu.append(
+          new MenuItem({
+            label: suggestion,
+            click: () => mainWindow?.webContents.replaceMisspelling(suggestion)
+          })
+        )
+      }
+      menu.append(new MenuItem({ type: 'separator' }))
+    }
+
+    // Add misspelled word to dictionary
+    if (params.misspelledWord) {
+      menu.append(
+        new MenuItem({
+          label: `Add "${params.misspelledWord}" to Dictionary`,
+          click: () => {
+            mainWindow?.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord)
+          }
+        })
+      )
+      menu.append(new MenuItem({ type: 'separator' }))
+    }
+
+    // Editing standard actions (Cut, Copy, Paste, etc.)
+    if (params.isEditable) {
+      menu.append(
+        new MenuItem({
+          label: 'Undo',
+          role: 'undo',
+          enabled: params.editFlags.canUndo
+        })
+      )
+      menu.append(
+        new MenuItem({
+          label: 'Redo',
+          role: 'redo',
+          enabled: params.editFlags.canRedo
+        })
+      )
+      menu.append(new MenuItem({ type: 'separator' }))
+      menu.append(
+        new MenuItem({
+          label: 'Cut',
+          role: 'cut',
+          enabled: params.editFlags.canCut
+        })
+      )
+      menu.append(
+        new MenuItem({
+          label: 'Copy',
+          role: 'copy',
+          enabled: params.editFlags.canCopy
+        })
+      )
+      menu.append(
+        new MenuItem({
+          label: 'Paste',
+          role: 'paste',
+          enabled: params.editFlags.canPaste
+        })
+      )
+      menu.append(new MenuItem({ type: 'separator' }))
+      menu.append(
+        new MenuItem({
+          label: 'Select All',
+          role: 'selectAll',
+          enabled: params.editFlags.canSelectAll
+        })
+      )
+    } else if (params.selectionText) {
+      menu.append(
+        new MenuItem({
+          label: 'Copy',
+          role: 'copy',
+          enabled: params.editFlags.canCopy
+        })
+      )
+    }
+
+    if (menu.items.length > 0) {
+      menu.popup()
+    }
   })
 
   // Dev server or production build

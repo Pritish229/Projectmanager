@@ -118,7 +118,10 @@ export function SettingsPage() {
         if (!res.hasUpdate) {
           toast.success('Your application is up to date!')
         } else {
-          toast.success(`New version v${res.latestVersion} is available!`)
+          setConfirmTitle('Download & Install Update')
+          setConfirmDescription(`Are you sure you want to download and install version v${res.latestVersion}? The application will close to execute the update installer once the download is complete.`)
+          setConfirmAction(() => () => triggerRemoteUpdate(res.url))
+          setConfirmOpen(true)
         }
       } else {
         setUpdateError(res.error || 'Failed to check for updates.')
@@ -151,7 +154,7 @@ export function SettingsPage() {
     setConfirmOpen(true)
   }
 
-  const triggerRemoteUpdate = async () => {
+  const triggerRemoteUpdate = async (url: string) => {
     setConfirmOpen(false)
     setDownloadProgress(0)
     
@@ -161,7 +164,7 @@ export function SettingsPage() {
     })
 
     try {
-      const res = await window.api.update.installRemote(updateInfo.url)
+      const res = await window.api.update.installRemote(url)
       if (!res.success) {
         toast.error(res.error || 'Failed to install update.')
         setDownloadProgress(null)
@@ -178,7 +181,7 @@ export function SettingsPage() {
     if (!updateInfo || !updateInfo.url) return
     setConfirmTitle('Download & Install Update')
     setConfirmDescription(`Are you sure you want to download and install version v${updateInfo.latestVersion}? The application will close to execute the update installer once the download is complete.`)
-    setConfirmAction(() => triggerRemoteUpdate)
+    setConfirmAction(() => () => triggerRemoteUpdate(updateInfo.url))
     setConfirmOpen(true)
   }
 
@@ -460,7 +463,7 @@ export function SettingsPage() {
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-center"
               >
                 <RefreshCw className={cn("w-3.5 h-3.5", isChecking && "animate-spin")} />
-                {isChecking ? 'Checking...' : 'Check for Updates'}
+                {isChecking ? 'Checking...' : 'Update App'}
               </button>
               <button
                 type="button"

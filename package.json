@@ -133,7 +133,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "installerIcon": "resources/icon.ico",
-      "uninstallerIcon": "resources/icon.ico"
+      "uninstallerIcon": "resources/icon.ico",
+      "deleteAppDataOnUninstall": true
     },
     "mac": {
       "target": "dmg"

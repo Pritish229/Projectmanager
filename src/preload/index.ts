@@ -148,6 +148,21 @@ const api = {
     todoCompletionChart: () => ipcRenderer.invoke('dashboard:todoCompletionChart'),
     monthlyProjectChart: () => ipcRenderer.invoke('dashboard:monthlyProjectChart'),
     recentActivity: () => ipcRenderer.invoke('dashboard:recentActivity')
+  },
+
+  // App Update
+  update: {
+    getVersion: () => ipcRenderer.invoke('update:getVersion'),
+    checkForUpdates: (url: string) => ipcRenderer.invoke('update:checkForUpdates', url),
+    installRemote: (url: string) => ipcRenderer.invoke('update:installRemote', url),
+    installLocal: () => ipcRenderer.invoke('update:installLocal'),
+    onDownloadProgress: (callback: (progress: number) => void) => {
+      const listener = (_event: any, value: number) => callback(value)
+      ipcRenderer.on('update:download-progress', listener)
+      return () => {
+        ipcRenderer.removeListener('update:download-progress', listener)
+      }
+    }
   }
 }
 

@@ -374,7 +374,8 @@ export function TodosTab({ projectId, isReadOnly }: TodosTabProps) {
                     className={cn(
                       "flex items-center px-4 py-3 hover:bg-muted/30 transition-colors group relative",
                       isCurrentlyDragged && "opacity-40 bg-muted/50 border-primary/20 border-dashed border-2",
-                      todo.status === 'completed' && "bg-card/40 opacity-70"
+                      todo.status === 'completed' && "bg-card/40 opacity-70",
+                      openMenuId === todo.id && "z-10 bg-muted/20 opacity-100"
                     )}
                   >
                     {/* Checkbox select */}

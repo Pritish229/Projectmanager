@@ -11,6 +11,7 @@ import { registerBackupHandlers, startAutoBackupScheduler } from './backup.ipc'
 import { registerReportHandlers } from './reports.ipc'
 import { registerDashboardHandlers } from './dashboard.ipc'
 import { registerClientHandlers } from './clients.ipc'
+import { registerUpdateHandlers } from './update.ipc'
 
 export function registerAllIpcHandlers(): void {
   registerProjectHandlers()
@@ -26,6 +27,7 @@ export function registerAllIpcHandlers(): void {
   registerBackupHandlers()
   registerReportHandlers()
   registerDashboardHandlers()
+  registerUpdateHandlers()
   
   // Start the background automatic backup scheduler
   startAutoBackupScheduler()

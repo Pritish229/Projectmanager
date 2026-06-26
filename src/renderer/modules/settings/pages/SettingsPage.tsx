@@ -4,8 +4,9 @@ import { useSettingsStore } from '@/stores/useSettingsStore'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { toast } from '@/stores/useToastStore'
 import { Breadcrumbs } from '@/components/layout'
+import { ConfirmDialog } from '@/components/shared'
 import { cn } from '@/lib/utils'
-import { Sun, Moon, Monitor, Save } from 'lucide-react'
+import { Sun, Moon, Monitor, Save, Download, RefreshCw, FileDown } from 'lucide-react'
 
 export function SettingsPage() {
   const { theme, setTheme } = useUIStore()
@@ -23,6 +24,20 @@ export function SettingsPage() {
   const [newPassword, setNewPassword] = useState('')
   const [pwdError, setPwdError] = useState<string | null>(null)
   const [pwdSuccess, setPwdSuccess] = useState<string | null>(null)
+
+  // App Update states
+  const [currentVersion, setCurrentVersion] = useState('1.0.0')
+  const [manifestUrl, setManifestUrl] = useState('')
+  const [isChecking, setIsChecking] = useState(false)
+  const [updateInfo, setUpdateInfo] = useState<any>(null)
+  const [updateError, setUpdateError] = useState<string | null>(null)
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null)
+  
+  // Confirm dialog state
+  const [updateConfirmOpen, setConfirmOpen] = useState(false)
+  const [confirmTitle, setConfirmTitle] = useState('')
+  const [confirmDescription, setConfirmDescription] = useState('')
+  const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null)
 
   const handlePinChange = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -76,6 +91,95 @@ export function SettingsPage() {
       setPwdError('Incorrect current password.')
       toast.error('Incorrect current password.')
     }
+  }
+
+  // App Update Handlers
+  useEffect(() => {
+    window.api.update.getVersion().then((v) => setCurrentVersion(v))
+  }, [])
+
+  useEffect(() => {
+    if (settings.updateUrl) {
+      setManifestUrl(settings.updateUrl)
+    } else {
+      setManifestUrl('https://raw.githubusercontent.com/Pritish229/MY-CRM/main/update.json')
+    }
+  }, [settings.updateUrl])
+
+  const handleCheckForUpdates = async () => {
+    setIsChecking(true)
+    setUpdateError(null)
+    setUpdateInfo(null)
+    try {
+      const urlToCheck = manifestUrl.trim() || 'https://raw.githubusercontent.com/Pritish229/MY-CRM/main/update.json'
+      const res = await window.api.update.checkForUpdates(urlToCheck)
+      if (res.success) {
+        setUpdateInfo(res)
+        if (!res.hasUpdate) {
+          toast.success('Your application is up to date!')
+        } else {
+          toast.success(`New version v${res.latestVersion} is available!`)
+        }
+      } else {
+        setUpdateError(res.error || 'Failed to check for updates.')
+        toast.error(res.error || 'Failed to check for updates.')
+      }
+    } catch (err: any) {
+      setUpdateError(err.message || 'An error occurred.')
+      toast.error(err.message || 'An error occurred.')
+    } finally {
+      setIsChecking(false)
+    }
+  }
+
+  const triggerLocalUpdate = async () => {
+    setConfirmOpen(false)
+    try {
+      const res = await window.api.update.installLocal()
+      if (res && !res.success && res.error !== 'Cancelled') {
+        toast.error(res.error || 'Failed to run local update installer.')
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to trigger local update.')
+    }
+  }
+
+  const handleLocalUpdate = () => {
+    setConfirmTitle('Install Local Update')
+    setConfirmDescription('Please select a downloaded installer executable (.exe) from your computer. Once selected, the application will exit and run the installer to upgrade PWM. Do you want to proceed?')
+    setConfirmAction(() => triggerLocalUpdate)
+    setConfirmOpen(true)
+  }
+
+  const triggerRemoteUpdate = async () => {
+    setConfirmOpen(false)
+    setDownloadProgress(0)
+    
+    // Subscribe to download progress
+    const unsubscribe = window.api.update.onDownloadProgress((progress) => {
+      setDownloadProgress(progress)
+    })
+
+    try {
+      const res = await window.api.update.installRemote(updateInfo.url)
+      if (!res.success) {
+        toast.error(res.error || 'Failed to install update.')
+        setDownloadProgress(null)
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'An error occurred during update.')
+      setDownloadProgress(null)
+    } finally {
+      unsubscribe()
+    }
+  }
+
+  const handleInstallRemoteUpdate = () => {
+    if (!updateInfo || !updateInfo.url) return
+    setConfirmTitle('Download & Install Update')
+    setConfirmDescription(`Are you sure you want to download and install version v${updateInfo.latestVersion}? The application will close to execute the update installer once the download is complete.`)
+    setConfirmAction(() => triggerRemoteUpdate)
+    setConfirmOpen(true)
   }
 
   useEffect(() => {
@@ -309,16 +413,141 @@ export function SettingsPage() {
           </div>
         </section>
 
+        {/* Application Update */}
+        <section className="rounded-xl border bg-card p-6">
+          <h2 className="text-lg font-semibold mb-1">Application Update</h2>
+          <p className="text-sm text-muted-foreground mb-4 font-normal">Check for remote updates or perform manual local updates</p>
+
+          <div className="space-y-4">
+            {/* Version Info */}
+            <div className="flex items-center justify-between p-3 rounded-lg bg-muted/40 border text-sm">
+              <span className="font-medium text-foreground">Current Installed Version</span>
+              <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-bold text-xs">
+                v{currentVersion}
+              </span>
+            </div>
+
+            {/* Remote Update URL Config */}
+            <div>
+              <label className="text-sm font-medium block mb-1 text-foreground">Update Manifest URL</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={manifestUrl}
+                  onChange={(e) => setManifestUrl(e.target.value)}
+                  placeholder="https://raw.githubusercontent.com/Pritish229/MY-CRM/main/update.json"
+                  className="flex-1 px-3 py-1.5 rounded-lg border bg-background text-sm outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await updateSetting('updateUrl', manifestUrl)
+                    toast.success('Update URL saved.')
+                  }}
+                  className="px-3.5 py-1.5 bg-secondary hover:bg-secondary/80 border text-secondary-foreground rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  Save URL
+                </button>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isChecking || downloadProgress !== null}
+                onClick={handleCheckForUpdates}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-center"
+              >
+                <RefreshCw className={cn("w-3.5 h-3.5", isChecking && "animate-spin")} />
+                {isChecking ? 'Checking...' : 'Check for Updates'}
+              </button>
+              <button
+                type="button"
+                disabled={isChecking || downloadProgress !== null}
+                onClick={handleLocalUpdate}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 border text-secondary-foreground text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-center"
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                Install Local Update (.exe)
+              </button>
+            </div>
+
+            {/* Feedback & Manifest Info */}
+            {updateError && (
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs animate-scale-in">
+                {updateError}
+              </div>
+            )}
+
+            {updateInfo && (
+              <div className="p-4 rounded-lg border bg-muted/25 space-y-3 animate-scale-in">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-foreground">
+                    {updateInfo.hasUpdate ? '💰 New Version Available!' : '✨ You are up to date'}
+                  </span>
+                  <span className="font-bold text-primary">v{updateInfo.latestVersion}</span>
+                </div>
+                
+                {updateInfo.releaseNotes && (
+                  <div className="text-xs text-muted-foreground bg-background p-2.5 rounded border max-h-24 overflow-y-auto font-sans whitespace-pre-line leading-relaxed">
+                    {updateInfo.releaseNotes}
+                  </div>
+                )}
+
+                {updateInfo.hasUpdate && downloadProgress === null && (
+                  <button
+                    type="button"
+                    onClick={handleInstallRemoteUpdate}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors cursor-pointer text-center"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download and Install Update
+                  </button>
+                )}
+
+                {downloadProgress !== null && (
+                  <div className="space-y-2 pt-1">
+                    <div className="flex justify-between text-xs font-medium">
+                      <span>Downloading Update Package...</span>
+                      <span>{downloadProgress}%</span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-emerald-500 h-full rounded-full transition-all duration-150"
+                        style={{ width: `${downloadProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground text-center">
+                      The application will restart and complete installation once the download finishes.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+
         {/* About */}
         <section className="rounded-xl border bg-card p-6">
           <h2 className="text-lg font-semibold mb-1">About</h2>
           <div className="space-y-2 text-sm text-muted-foreground">
-            <p>Project Workspace Manager v1.0.0</p>
+            <p>Project Workspace Manager v{currentVersion}</p>
             <p>A fully offline project management system</p>
             <p>Built with Electron, React, TypeScript, and SQLite</p>
           </div>
         </section>
       </div>
+
+      <ConfirmDialog
+        open={updateConfirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={confirmAction || (() => {})}
+        title={confirmTitle}
+        description={confirmDescription}
+        confirmLabel="Proceed"
+        variant="info"
+      />
     </div>
   )
 }

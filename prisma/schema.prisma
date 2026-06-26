@@ -1,0 +1,271 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────────────
+// Users
+// ──────────────────────────────────────────────
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @default("")
+  avatar    String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects      Project[]
+  activityLogs  ActivityLog[]
+
+  @@map("users")
+}
+
+// ──────────────────────────────────────────────
+// Clients
+// ──────────────────────────────────────────────
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  company   String   @default("")
+  email     String   @default("")
+  phone     String   @default("")
+  status    String   @default("active") // active, inactive
+  createdAt DateTime @default(now())
+
+  projects  Project[]
+  approvals Approval[]
+
+  @@map("clients")
+}
+
+// ──────────────────────────────────────────────
+// Projects
+// ──────────────────────────────────────────────
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  description String   @default("")
+  clientId    String?
+  userId      String?
+  startDate   DateTime?
+  deadline    DateTime?
+  priority    String   @default("medium") // low, medium, high, urgent
+  status      String   @default("draft")  // draft, active, waiting_approval, approved, rejected, closed
+  tags        String   @default("")       // comma-separated
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client       Client?       @relation(fields: [clientId], references: [id])
+  user         User?         @relation(fields: [userId], references: [id])
+  todos        Todo[]
+  deliverables Deliverable[]
+  notes        Note[]
+  files        ProjectFile[]
+  fileFolders  FileFolder[]
+  activityLogs ActivityLog[]
+  notifications Notification[]
+
+  @@map("projects")
+}
+
+// ──────────────────────────────────────────────
+// Todos
+// ──────────────────────────────────────────────
+model Todo {
+  id          String   @id @default(uuid())
+  projectId   String
+  title       String
+  description String   @default("")
+  priority    String   @default("medium") // low, medium, high, urgent
+  status      String   @default("pending") // pending, in_progress, waiting_approval, completed, blocked, cancelled
+  startDate   DateTime?
+  dueDate     DateTime?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deliverableTodos DeliverableTodo[]
+
+  @@map("project_todos")
+}
+
+// ──────────────────────────────────────────────
+// Deliverables
+// ──────────────────────────────────────────────
+model Deliverable {
+  id                String   @id @default(uuid())
+  projectId         String
+  title             String
+  description       String   @default("")
+  version           Int      @default(1)
+  deliverableNumber String   @default("")
+  filePath          String   @default("")
+  fileName          String   @default("")
+  status            String   @default("draft") // draft, ready, sent, approved, rejected, resubmitted
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deliverableTodos DeliverableTodo[]
+  approvals        Approval[]
+
+  @@map("deliverables")
+}
+
+// ──────────────────────────────────────────────
+// Deliverable <-> Todo junction
+// ──────────────────────────────────────────────
+model DeliverableTodo {
+  id            String @id @default(uuid())
+  deliverableId String
+  todoId        String
+
+  deliverable Deliverable @relation(fields: [deliverableId], references: [id], onDelete: Cascade)
+  todo        Todo        @relation(fields: [todoId], references: [id], onDelete: Cascade)
+
+  @@unique([deliverableId, todoId])
+  @@map("deliverable_todos")
+}
+
+// ──────────────────────────────────────────────
+// Approvals
+// ──────────────────────────────────────────────
+model Approval {
+  id            String   @id @default(uuid())
+  deliverableId String
+  clientId      String?
+  status        String   @default("pending") // pending, approved, rejected, changes_requested, resubmitted
+  comment       String   @default("")
+  date          DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  deliverable Deliverable @relation(fields: [deliverableId], references: [id], onDelete: Cascade)
+  client      Client?     @relation(fields: [clientId], references: [id])
+
+  @@map("approvals")
+}
+
+// ──────────────────────────────────────────────
+// Notes
+// ──────────────────────────────────────────────
+model Note {
+  id        String   @id @default(uuid())
+  projectId String
+  title     String
+  content   String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("project_notes")
+}
+
+// ──────────────────────────────────────────────
+// Project Files
+// ──────────────────────────────────────────────
+model ProjectFile {
+  id           String   @id @default(uuid())
+  projectId    String
+  folderId     String?
+  name         String
+  originalName String
+  path         String
+  mimeType     String   @default("")
+  size         Int      @default(0)
+  category     String   @default("")
+  createdAt    DateTime @default(now())
+
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  folder  FileFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  @@map("project_files")
+}
+
+// ──────────────────────────────────────────────
+// File Folders (virtual — no disk restructuring)
+// ──────────────────────────────────────────────
+model FileFolder {
+  id        String   @id @default(uuid())
+  projectId String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  files   ProjectFile[]
+
+  @@map("file_folders")
+}
+
+// ──────────────────────────────────────────────
+// Activity Logs
+// ──────────────────────────────────────────────
+model ActivityLog {
+  id        String   @id @default(uuid())
+  projectId String?
+  action    String
+  entity    String   @default("")
+  entityId  String   @default("")
+  message   String
+  userId    String?
+  createdAt DateTime @default(now())
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  user    User?    @relation(fields: [userId], references: [id])
+
+  @@map("activity_logs")
+}
+
+// ──────────────────────────────────────────────
+// Notifications
+// ──────────────────────────────────────────────
+model Notification {
+  id        String   @id @default(uuid())
+  type      String   // overdue, deadline, approval, completion
+  title     String
+  message   String
+  projectId String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@map("notifications")
+}
+
+// ──────────────────────────────────────────────
+// Settings
+// ──────────────────────────────────────────────
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// ──────────────────────────────────────────────
+// Backups
+// ──────────────────────────────────────────────
+model Backup {
+  id        String   @id @default(uuid())
+  fileName  String
+  filePath  String
+  size      Int      @default(0)
+  type      String   @default("manual") // manual, automatic
+  createdAt DateTime @default(now())
+
+  @@map("backups")
+}

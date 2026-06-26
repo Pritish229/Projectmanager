@@ -1,6 +1,6 @@
 {
   "name": "project-workspace-manager",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "A production-ready offline project workspace manager",
   "main": "./out/main/index.js",
   "author": "PWM",

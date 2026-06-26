@@ -16,6 +16,7 @@ import { ReportsPage } from '@/modules/reports/pages/ReportsPage'
 import { NotificationsPage } from '@/modules/notifications/pages/NotificationsPage'
 import { BackupPage } from '@/modules/backup/pages/BackupPage'
 import { SettingsPage } from '@/modules/settings/pages/SettingsPage'
+import { SearchPage } from '@/modules/search/pages/SearchPage'
 
 export function App() {
   if (typeof window.api === 'undefined') {
@@ -199,6 +200,7 @@ function AppContent() {
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/backup" element={<BackupPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/search" element={<SearchPage />} />
           </Routes>
         </main>
       </div>

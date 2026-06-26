@@ -46,7 +46,13 @@ export function Navbar() {
             type="text"
             placeholder="Search projects, todos, notes... (Ctrl+K)"
             value={globalSearch}
-            onChange={(e) => setGlobalSearch(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value
+              setGlobalSearch(val)
+              if (val.trim() && window.location.hash !== '#/search') {
+                navigate('/search')
+              }
+            }}
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"

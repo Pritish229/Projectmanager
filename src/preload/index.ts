@@ -163,6 +163,11 @@ const api = {
         ipcRenderer.removeListener('update:download-progress', listener)
       }
     }
+  },
+
+  // Global Search
+  search: {
+    global: (query: string) => ipcRenderer.invoke('search:global', query)
   }
 }
 

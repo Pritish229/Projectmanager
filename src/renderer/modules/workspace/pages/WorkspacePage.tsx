@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useProjectStore, type Project } from '@/stores/useProjectStore'
 import { Breadcrumbs } from '@/components/layout'
 import { StatusBadge, PriorityBadge, PageLoader } from '@/components/shared'
@@ -33,23 +33,37 @@ const TABS = [
 export function WorkspacePage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { currentProject, loading, fetchProject } = useProjectStore()
-  const [activeTab, setActiveTab] = useState('overview')
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'overview')
 
   useEffect(() => {
     if (id) fetchProject(id)
   }, [id, fetchProject])
 
   useEffect(() => {
+    const tabParam = searchParams.get('tab')
+    if (tabParam && tabParam !== activeTab) {
+      setActiveTab(tabParam)
+    }
+  }, [searchParams])
+
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId)
+    setSearchParams({ tab: tabId })
+  }
+
+  useEffect(() => {
     const handleSwitchTab = (e: Event) => {
       const customEvent = e as CustomEvent<{ tabId: string }>
       if (customEvent.detail?.tabId) {
         setActiveTab(customEvent.detail.tabId)
+        setSearchParams({ tab: customEvent.detail.tabId })
       }
     }
     window.addEventListener('workspace:switch-tab', handleSwitchTab)
     return () => window.removeEventListener('workspace:switch-tab', handleSwitchTab)
-  }, [])
+  }, [setSearchParams])
 
   if (loading || !currentProject) return <PageLoader />
 
@@ -108,7 +122,7 @@ export function WorkspacePage() {
           {TABS.map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={cn(
                 'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap',
                 activeTab === tab.id

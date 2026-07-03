@@ -66,11 +66,11 @@ export function registerTodoHandlers(): void {
 
   // Update todo
   ipcMain.handle('todos:update', async (_, id: string, data: Record<string, unknown>) => {
-    if (data.startDate && typeof data.startDate === 'string') {
-      data.startDate = new Date(data.startDate as string)
+    if ('startDate' in data) {
+      data.startDate = data.startDate ? new Date(data.startDate as any) : null
     }
-    if (data.dueDate && typeof data.dueDate === 'string') {
-      data.dueDate = new Date(data.dueDate as string)
+    if ('dueDate' in data) {
+      data.dueDate = data.dueDate ? new Date(data.dueDate as any) : null
     }
 
     const todo = await prisma.todo.update({

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { toast } from './useToastStore'
 
 export interface Project {
   id: string
@@ -89,48 +90,90 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   createProject: async (data) => {
-    const project = await window.api.projects.create(data)
-    await get().fetchProjects()
-    return project
+    try {
+      const project = await window.api.projects.create(data)
+      await get().fetchProjects()
+      toast.success('Project created successfully.')
+      return project
+    } catch (err) {
+      toast.error('Failed to create project', (err as Error).message)
+      throw err
+    }
   },
 
   updateProject: async (id, data) => {
-    await window.api.projects.update(id, data)
-    await get().fetchProjects()
-    if (get().currentProject?.id === id) {
-      await get().fetchProject(id)
+    try {
+      await window.api.projects.update(id, data)
+      await get().fetchProjects()
+      if (get().currentProject?.id === id) {
+        await get().fetchProject(id)
+      }
+      toast.success('Project updated successfully.')
+    } catch (err) {
+      toast.error('Failed to update project', (err as Error).message)
+      throw err
     }
   },
 
   deleteProject: async (id) => {
-    await window.api.projects.delete(id)
-    set({ currentProject: null })
-    await get().fetchProjects()
+    try {
+      await window.api.projects.delete(id)
+      set({ currentProject: null })
+      await get().fetchProjects()
+      toast.success('Project deleted successfully.')
+    } catch (err) {
+      toast.error('Failed to delete project', (err as Error).message)
+      throw err
+    }
   },
 
   archiveProject: async (id) => {
-    await window.api.projects.archive(id)
-    await get().fetchProjects()
+    try {
+      await window.api.projects.archive(id)
+      await get().fetchProjects()
+      toast.success('Project archived successfully.')
+    } catch (err) {
+      toast.error('Failed to archive project', (err as Error).message)
+      throw err
+    }
   },
 
   unarchiveProject: async (id) => {
-    await window.api.projects.update(id, { archived: false })
-    await get().fetchProjects()
+    try {
+      await window.api.projects.update(id, { archived: false })
+      await get().fetchProjects()
+      toast.success('Project restored successfully.')
+    } catch (err) {
+      toast.error('Failed to restore project', (err as Error).message)
+      throw err
+    }
   },
 
   closeProject: async (id) => {
-    await window.api.projects.close(id)
-    await get().fetchProjects()
-    if (get().currentProject?.id === id) {
-      await get().fetchProject(id)
+    try {
+      await window.api.projects.close(id)
+      await get().fetchProjects()
+      if (get().currentProject?.id === id) {
+        await get().fetchProject(id)
+      }
+      toast.success('Project closed successfully.')
+    } catch (err) {
+      toast.error('Failed to close project', (err as Error).message)
+      throw err
     }
   },
 
   reopenProject: async (id) => {
-    await window.api.projects.reopen(id)
-    await get().fetchProjects()
-    if (get().currentProject?.id === id) {
-      await get().fetchProject(id)
+    try {
+      await window.api.projects.reopen(id)
+      await get().fetchProjects()
+      if (get().currentProject?.id === id) {
+        await get().fetchProject(id)
+      }
+      toast.success('Project reopened successfully.')
+    } catch (err) {
+      toast.error('Failed to reopen project', (err as Error).message)
+      throw err
     }
   }
 }))

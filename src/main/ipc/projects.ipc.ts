@@ -116,11 +116,11 @@ export function registerProjectHandlers(): void {
   // Update project
   ipcMain.handle('projects:update', async (_, id: string, data: Record<string, unknown>) => {
     // Handle date conversions
-    if (data.startDate && typeof data.startDate === 'string') {
-      data.startDate = new Date(data.startDate as string)
+    if ('startDate' in data) {
+      data.startDate = data.startDate ? new Date(data.startDate as any) : null
     }
-    if (data.deadline && typeof data.deadline === 'string') {
-      data.deadline = new Date(data.deadline as string)
+    if ('deadline' in data) {
+      data.deadline = data.deadline ? new Date(data.deadline as any) : null
     }
 
     const updated = await prisma.project.update({

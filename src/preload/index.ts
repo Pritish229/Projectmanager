@@ -138,7 +138,9 @@ const api = {
     deliverableSummary: (projectId?: string) => ipcRenderer.invoke('reports:deliverableSummary', projectId),
     approvalSummary: (projectId?: string) => ipcRenderer.invoke('reports:approvalSummary', projectId),
     generatePdf: (type: string, data: unknown) => ipcRenderer.invoke('reports:generatePdf', type, data),
-    generateCsv: (headers: string[], rows: string[][]) => ipcRenderer.invoke('reports:generateCsv', headers, rows)
+    generateCsv: (headers: string[], rows: string[][]) => ipcRenderer.invoke('reports:generateCsv', headers, rows),
+    getProjectFullSummary: (projectId: string) => ipcRenderer.invoke('reports:getProjectFullSummary', projectId),
+    generateProjectSummaryPdf: (summaryData: unknown, themeId?: string) => ipcRenderer.invoke('reports:generateProjectSummaryPdf', summaryData, themeId)
   },
 
   // Dashboard
@@ -168,6 +170,23 @@ const api = {
   // Global Search
   search: {
     global: (query: string) => ipcRenderer.invoke('search:global', query)
+  },
+
+  // Email
+  email: {
+    sendWithPdf: (options: unknown) => ipcRenderer.invoke('email:sendWithPdf', options),
+    testConnection: (smtpConfig: unknown) => ipcRenderer.invoke('email:testConnection', smtpConfig),
+    getSmtpConfig: () => ipcRenderer.invoke('email:getSmtpConfig'),
+    // SMTP Profile CRUD
+    getProfiles: () => ipcRenderer.invoke('email:getProfiles'),
+    saveProfile: (profile: unknown) => ipcRenderer.invoke('email:saveProfile', profile),
+    deleteProfile: (id: string) => ipcRenderer.invoke('email:deleteProfile', id),
+    getProfilePass: (id: string) => ipcRenderer.invoke('email:getProfilePass', id)
+  },
+
+  // Shell utilities
+  shell: {
+    openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)
   }
 }
 

@@ -257,6 +257,25 @@ model Setting {
 }
 
 // ──────────────────────────────────────────────
+// SMTP Profiles
+// ──────────────────────────────────────────────
+model SmtpProfile {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  host      String
+  port      Int      @default(587)
+  secure    Boolean  @default(false)
+  user      String
+  pass      String
+  from      String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("smtp_profiles")
+}
+
+
+// ──────────────────────────────────────────────
 // Backups
 // ──────────────────────────────────────────────
 model Backup {

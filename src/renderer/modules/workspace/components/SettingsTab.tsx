@@ -20,7 +20,8 @@ import {
   Building2,
   Calendar,
   X,
-  AlertTriangle
+  AlertTriangle,
+  Mail
 } from 'lucide-react'
 
 interface SettingsTabProps {
@@ -61,6 +62,10 @@ export function SettingsTab({ project }: SettingsTabProps) {
   const [clientSearchQuery, setClientSearchQuery] = useState('')
   const [showClientDropdown, setShowClientDropdown] = useState(false)
 
+  // Email profile state
+  const [smtpProfiles, setSmtpProfiles] = useState<any[]>([])
+  const [projectSmtpProfileId, setProjectSmtpProfileId] = useState<string>('')
+
   const isReadOnly = project.status === 'closed'
 
   const {
@@ -83,10 +88,14 @@ export function SettingsTab({ project }: SettingsTabProps) {
     }
   })
 
-  // Load clients on mount
+  // Load clients and email profiles on mount
   useEffect(() => {
     fetchClients()
-  }, [fetchClients])
+    window.api.email.getProfiles().then(setSmtpProfiles).catch(() => {})
+    window.api.settings.get(`project_${project.id}_default_smtp_profile_id`).then(val => {
+      if (val) setProjectSmtpProfileId(val)
+    }).catch(() => {})
+  }, [fetchClients, project.id])
 
   // Sync form values when the project updates
   useEffect(() => {
@@ -116,6 +125,7 @@ export function SettingsTab({ project }: SettingsTabProps) {
         clientId: selectedClientId || null
       }
       await updateProject(project.id, submitData)
+      await window.api.settings.set(`project_${project.id}_default_smtp_profile_id`, projectSmtpProfileId)
       setSuccessMessage('Project settings saved successfully.')
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (err) {
@@ -416,6 +426,28 @@ export function SettingsTab({ project }: SettingsTabProps) {
                   className="w-full px-3 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-60 disabled:cursor-not-allowed"
                   placeholder="design, web, branding (comma-separated)"
                 />
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-indigo-500" /> Default Email Profile for Reports
+                </label>
+                <select
+                  value={projectSmtpProfileId}
+                  onChange={(e) => setProjectSmtpProfileId(e.target.value)}
+                  disabled={isReadOnly}
+                  className="w-full px-3 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <option value="">Use App Global Default Profile</option>
+                  {smtpProfiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.user})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  When sending report PDFs via email for this project, this SMTP profile will be auto-selected by default.
+                </p>
               </div>
 
               {!isReadOnly && (

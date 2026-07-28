@@ -13,6 +13,7 @@ import { registerDashboardHandlers } from './dashboard.ipc'
 import { registerClientHandlers } from './clients.ipc'
 import { registerUpdateHandlers } from './update.ipc'
 import { registerSearchHandlers } from './search.ipc'
+import { registerEmailHandlers } from './email.ipc'
 
 export function registerAllIpcHandlers(): void {
   registerProjectHandlers()
@@ -28,6 +29,7 @@ export function registerAllIpcHandlers(): void {
   registerBackupHandlers()
   registerReportHandlers()
   registerDashboardHandlers()
+  registerEmailHandlers()
   registerUpdateHandlers()
   registerSearchHandlers()
   

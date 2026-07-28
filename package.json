@@ -43,6 +43,7 @@
     "@tiptap/extension-placeholder": "^2.11.5",
     "@tiptap/react": "^2.11.5",
     "@tiptap/starter-kit": "^2.11.5",
+    "@types/nodemailer": "^8.0.1",
     "archiver": "^7.0.1",
     "archiver-utils": "^5.0.2",
     "class-variance-authority": "^0.7.1",
@@ -50,6 +51,7 @@
     "date-fns": "^4.1.0",
     "fuse.js": "^7.0.0",
     "lucide-react": "^0.475.0",
+    "nodemailer": "^9.0.3",
     "pdf-lib": "^1.17.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -122,7 +124,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "signAndEditExecutable": false

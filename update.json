@@ -1,5 +1,5 @@
 {
-  "version": "1.0.3",
-  "url": "https://github.com/Pritish229/Projectmanager/releases/download/v1.0.3/Project.Workspace.Manager.Setup.1.0.3.exe",
-  "releaseNotes": "Updates in v1.0.3:\n- Added global search feature supporting search-as-you-type for projects, tasks, notes, and clients.\n- Enabled responsive Search Results page with category filtering and keyword highlighting.\n- Added tab deep-linking inside project workspaces (e.g. directly open Todos/Notes from search)."
+  "version": "1.0.5",
+  "url": "https://github.com/Pritish229/Projectmanager/releases/download/v1.0.4/Project.Workspace.Manager.Setup.1.0.4.exe",
+  "releaseNotes": "Updates in v1.0.4:\n- Added Project Summary Reports with visual donut/bar/radar charts, task completion progress rings, and PDF export.\n- Integrated Share via Email (PDF attachment) with multi-recipient support.\n- Added Multiple Email SMTP Profiles & Step-by-Step Configuration Guide (Gmail, Outlook, Yahoo, Custom) in Settings.\n- Refactored Settings page UI to top tabbed navigation."
 }

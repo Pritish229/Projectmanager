@@ -1,13 +1,15 @@
 # Project Workspace Manager (PWM)
 
-A production-ready, 100% offline-first desktop application for managing private project workspaces. PWM provides full project isolation, client approval flows, deliverable version tracking, rich text notes, task management, global offline search, local automated backups, and reports.
+A production-ready, 100% offline-first desktop application for managing private project workspaces. PWM provides full project isolation, client approval flows, deliverable version tracking, rich text notes, task management, global offline search, local automated backups, reports, and a production-ready automatic update system powered by `electron-updater` and GitHub Releases.
 
 ---
 
 ## 🚀 Key Features
 
 - **Project Workspaces**: Isolated hubs for individual projects featuring dedicated tabs for Overview, Todos, Deliverables, Client Approvals, Files, Notes, Timeline, Activity Logs, and settings.
-- **100% Offline-First Architecture**: Uses a local SQLite database driven by Prisma ORM. No external network connections required.
+- **100% Offline-First Architecture**: Uses a local SQLite database driven by Prisma ORM. No external network connections required for core functionality.
+- **Automatic Background Updates**: Production-ready `electron-updater` integration connected to GitHub Releases with real-time UI status notifications, download progress bar (%), release notes, and silent background checks.
+- **Automated CI/CD & Releases**: Single-command version release script (`npm run release`) paired with GitHub Actions to automate versioning, Git tagging, installer compilation (`.exe`), blockmap generation, and GitHub Release asset uploads.
 - **Modern Desktop UI**: Built with React 19, Vite, Tailwind CSS v4, and Shadcn UI components.
 - **State Management**: Zustand stores map directly to clean IPC communications with the Electron backend.
 - **Dashboard Analytics**: Rich visual metrics, status trackers, and interactive Recharts data visualization.
@@ -22,10 +24,18 @@ The repository is structured following clean architectural boundaries between th
 
 ```
 MY CRM/
+├── .github/
+│   └── workflows/
+│       └── release.yml           # GitHub Actions workflow for automated releases
+│
 ├── prisma/                       # SQLite & database schema
 │   ├── dev.db                    # Local SQLite Database (auto-generated)
 │   ├── schema.prisma             # Prisma ORM Database Models
 │   └── migrations/               # Database schema versioning & SQL scripts
+│
+├── scripts/
+│   ├── build-prod-db.js          # Production template database builder
+│   └── release.js                # Automated version bump, git tagging & push script
 │
 ├── src/
 │   ├── main/                     # Electron Main Process (Node.js backend)
@@ -43,11 +53,11 @@ MY CRM/
 │   │       ├── reports.ipc.ts    # PDF/CSV report compiler processes
 │   │       ├── notifications.ipc.ts # Deadline monitoring & background alerts
 │   │       ├── backup.ipc.ts     # ZIP archiver export & import restore tools
-│   │       └── settings.ipc.ts   # Local settings persistence
+│   │       ├── settings.ipc.ts   # Local settings persistence
+│   │       └── update.ipc.ts     # electron-updater initialization & IPC handlers
 │   │
 │   ├── preload/                  # Secure Preload Bridge
-│   │   ├── index.ts              # contextBridge API exposing safe methods to frontend
-│   │   └── api.ts                # TypeScript declarations for the preload bridge
+│   │   └── index.ts              # contextBridge API exposing safe methods to frontend
 │   │
 │   └── renderer/                 # React Frontend (Vite + Tailwind CSS v4)
 │       ├── index.html            # Web app entry markup template
@@ -65,7 +75,7 @@ MY CRM/
 │       │   ├── reports/          # Report compiler pages
 │       │   ├── notifications/    # Notifications directory & lists
 │       │   ├── backup/           # Backup triggers & import settings
-│       │   └── settings/         # Theme toggles & system folder paths
+│       │   └── settings/         # Themes, security, SMTP, and Updates & About page
 │       │
 │       ├── stores/               # Zustand Global State Managers
 │       │   ├── useProjectStore.ts # Projects directory status state
@@ -79,7 +89,8 @@ MY CRM/
 │       └── types/                # Typescript definition schemas
 │
 ├── electron.vite.config.ts       # Bundler configuration (main, preload, renderer)
-├── package.json                  # Dependencies, dev dependencies and scripts
+├── dev-app-update.yml            # Dev-mode electron-updater configuration
+├── package.json                  # Dependencies, dev dependencies, scripts & electron-builder config
 └── tsconfig.json                 # TypeScript compiler mapping
 ```
 
@@ -117,23 +128,68 @@ npm run dev
 ```
 
 ### Compile & Build Production Bundles
-Verify compilation and compile assets for both Main and Renderer processes:
+Verify compilation and compile assets for Main, Preload, and Renderer processes:
 ```bash
 npm run build
 ```
 
-### Package Distributables
-To build standalone offline packages (installers) for specific platforms:
+### Package Distributables Locally
+To package standalone installers locally for specific platforms:
 ```bash
-# Windows
+# Windows (.exe installer)
 npm run build:win
 
-# macOS
+# macOS (.dmg installer)
 npm run build:mac
 
-# Linux
+# Linux (.AppImage installer)
 npm run build:linux
 ```
+
+---
+
+## 🔄 Automatic Updates & Releases
+
+The application uses **`electron-updater`** connected to **GitHub Releases** (`Pritish229/Projectmanager`).
+
+### 1. How Updates Work for End Users
+- **Silent Background Check**: Automatically checks for updates 5 seconds after app startup.
+- **Manual Check**: Users can navigate to **Settings > Updates & About** and click **Check for Updates**.
+- **Real-Time UI Notifications**:
+  - Displays **Current Version** vs **Latest Version**.
+  - Displays formatted **Release Notes**.
+  - Asks: `"A new version is available. Download now?"` (with **Download Now** button).
+  - Shows background **Download Progress Bar (%)**.
+  - Asks: `"Update downloaded. Restart now to install?"` (with **Restart and Install** button).
+  - Clicking **Restart and Install** calls `autoUpdater.quitAndInstall()`, updating the binary silently without touching user database files.
+
+### 2. How to Publish a Release (Single Command)
+To bump the app version and publish a release automatically to GitHub:
+
+```bash
+# Bump patch version (e.g. 1.0.4 -> 1.0.5), commit, tag v1.0.5, and push to GitHub:
+npm run release
+
+# Or bump minor version (e.g. 1.0.4 -> 1.1.0):
+npm run release minor
+
+# Or specify an explicit version:
+npm run release 1.0.6
+```
+
+#### What `npm run release` Automatically Handles:
+1. Updates `package.json` and `update.json` version numbers.
+2. Commits the updated version files (`git commit -m "release: v1.0.5"`).
+3. Creates the Git tag (`v1.0.5`).
+4. Pushes commits and tags to GitHub (`git push origin main --tags`).
+5. Triggers **GitHub Actions** (`.github/workflows/release.yml`), which compiles the `.exe`, `latest.yml`, and `.blockmap` files and attaches them to the GitHub Release automatically.
+
+---
+
+## 🔒 SQLite Database Preservation Guarantee
+
+> [!IMPORTANT]
+> The SQLite database file resides strictly inside the user's application data directory at `app.getPath('userData')/data/pwm.db`. Application updates replace only the application binary bundle (`app.asar` and resources). User database files and uploaded project assets are **never overwritten, deleted, or altered** during app updates.
 
 ---
 
@@ -170,13 +226,6 @@ Selecting any project opens its dedicated workspace containing:
 
 ### 5. Settings & Customization
 - **Theme**: Swap instantly between Light Mode, Dark Mode, or System settings.
-- **File Folders**: Choose custom directories for backups and PDF reports.
-
----
-
-## 🛠️ Verification & Bug Fixes
-
-Before running the application, we performed compilation tests and resolved structural bugs to guarantee stability:
-1. **Bundler Resolve Issue Fixed**: Added `@electron-toolkit/utils` package (which was missing from the dependencies in `package.json` but imported in `src/main/index.ts`) to fix the Rollup build compiler crash.
-2. **Prisma Schema Synchronized**: Ran the initial database schema migration to build `dev.db` and generate the Prisma Client, ensuring that the backend can connect to the database on startup.
-3. **Application Verification**: Successfully compiled the code using `npm run build` and verified that running the development server starts Vite and Electron cleanly with zero crashes.
+- **Email Profiles**: Manage SMTP profiles with step-by-step setup guides for Gmail, Outlook, Yahoo, and Custom webmail.
+- **Invoice Templates**: Customize pre-built themes or design custom invoice layouts.
+- **Updates & About**: Check for application updates, view release notes, and install updates.

@@ -177,13 +177,29 @@ export function SettingsPage() {
   const [pwdError, setPwdError] = useState<string | null>(null)
   const [pwdSuccess, setPwdSuccess] = useState<string | null>(null)
 
-  // App Update states
-  const [currentVersion, setCurrentVersion] = useState('1.0.0')
-  const [manifestUrl, setManifestUrl] = useState('')
-  const [isChecking, setIsChecking] = useState(false)
-  const [updateInfo, setUpdateInfo] = useState<any>(null)
-  const [updateError, setUpdateError] = useState<string | null>(null)
-  const [downloadProgress, setDownloadProgress] = useState<number | null>(null)
+  // App Update states powered by electron-updater
+  const [updateState, setUpdateState] = useState<{
+    status:
+      | 'idle'
+      | 'checking-for-update'
+      | 'update-available'
+      | 'update-not-available'
+      | 'downloading'
+      | 'update-downloaded'
+      | 'error'
+    currentVersion: string
+    latestVersion?: string
+    releaseNotes?: string
+    progress?: number
+    transferred?: number
+    total?: number
+    bytesPerSecond?: number
+    error?: string
+  }>({
+    status: 'idle',
+    currentVersion: '1.0.0'
+  })
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
 
   // Confirm dialog state
   const [updateConfirmOpen, setConfirmOpen] = useState(false)
@@ -417,95 +433,61 @@ export function SettingsPage() {
     }
   }
 
-  // App Update Handlers
+  // App Update Handlers (electron-updater)
   useEffect(() => {
-    window.api.update.getVersion().then((v) => setCurrentVersion(v))
+    if (window.api?.update) {
+      window.api.update.getAppVersion().then((v: string) => {
+        if (v) setUpdateState((prev) => ({ ...prev, currentVersion: v }))
+      })
+      window.api.update.getStatus().then((st: any) => {
+        if (st) setUpdateState(st)
+      })
+
+      const unsubscribe = window.api.update.onStatusChange((st: any) => {
+        setUpdateState(st)
+        if (st.status !== 'checking-for-update') {
+          setIsCheckingUpdate(false)
+        }
+      })
+      return () => {
+        if (unsubscribe) unsubscribe()
+      }
+    }
   }, [])
 
-  useEffect(() => {
-    if (settings.updateUrl) {
-      setManifestUrl(settings.updateUrl)
-    } else {
-      setManifestUrl('https://raw.githubusercontent.com/Pritish229/MY-CRM/main/update.json')
-    }
-  }, [settings.updateUrl])
-
   const handleCheckForUpdates = async () => {
-    setIsChecking(true)
-    setUpdateError(null)
-    setUpdateInfo(null)
+    setIsCheckingUpdate(true)
     try {
-      const urlToCheck = manifestUrl.trim() || 'https://raw.githubusercontent.com/Pritish229/MY-CRM/main/update.json'
-      const res = await window.api.update.checkForUpdates(urlToCheck)
-      if (res.success) {
-        setUpdateInfo(res)
-        if (!res.hasUpdate) {
-          toast.success('Your application is up to date!')
-        } else {
-          setConfirmTitle('Download & Install Update')
-          setConfirmDescription(`Are you sure you want to download and install version v${res.latestVersion}?`)
-          setConfirmAction(() => () => triggerRemoteUpdate(res.url))
-          setConfirmOpen(true)
-        }
-      } else {
-        setUpdateError(res.error || 'Failed to check for updates.')
+      const res = await window.api.update.checkForUpdates()
+      if (!res.success) {
         toast.error(res.error || 'Failed to check for updates.')
       }
     } catch (err: any) {
-      setUpdateError(err.message || 'An error occurred.')
-      toast.error(err.message || 'An error occurred.')
+      toast.error(err.message || 'An error occurred while checking for updates.')
     } finally {
-      setIsChecking(false)
+      setIsCheckingUpdate(false)
     }
   }
 
-  const triggerLocalUpdate = async () => {
-    setConfirmOpen(false)
+  const handleDownloadUpdate = async () => {
     try {
-      const res = await window.api.update.installLocal()
-      if (res && !res.success && res.error !== 'Cancelled') {
-        toast.error(res.error || 'Failed to run local update installer.')
-      }
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to trigger local update.')
-    }
-  }
-
-  const handleLocalUpdate = () => {
-    setConfirmTitle('Install Local Update')
-    setConfirmDescription('Please select a downloaded installer executable (.exe) from your computer.')
-    setConfirmAction(() => triggerLocalUpdate)
-    setConfirmOpen(true)
-  }
-
-  const triggerRemoteUpdate = async (url: string) => {
-    setConfirmOpen(false)
-    setDownloadProgress(0)
-
-    const unsubscribe = window.api.update.onDownloadProgress((progress) => {
-      setDownloadProgress(progress)
-    })
-
-    try {
-      const res = await window.api.update.installRemote(url)
+      const res = await window.api.update.downloadUpdate()
       if (!res.success) {
-        toast.error(res.error || 'Failed to install update.')
-        setDownloadProgress(null)
+        toast.error(res.error || 'Failed to start downloading update.')
+      } else {
+        toast.info('Downloading update in background...')
       }
     } catch (err: any) {
-      toast.error(err.message || 'An error occurred during update.')
-      setDownloadProgress(null)
-    } finally {
-      unsubscribe()
+      toast.error(err.message || 'An error occurred while starting download.')
     }
   }
 
-  const handleInstallRemoteUpdate = () => {
-    if (!updateInfo || !updateInfo.url) return
-    setConfirmTitle('Download & Install Update')
-    setConfirmDescription(`Are you sure you want to download and install version v${updateInfo.latestVersion}?`)
-    setConfirmAction(() => () => triggerRemoteUpdate(updateInfo.url))
-    setConfirmOpen(true)
+  const handleRestartAndInstall = async () => {
+    try {
+      await window.api.update.restartAndInstall()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to restart and install update.')
+    }
   }
 
   const themes = [
@@ -1518,107 +1500,135 @@ export function SettingsPage() {
             <section className="rounded-xl border bg-card p-6 shadow-sm space-y-6">
               <div>
                 <h2 className="text-lg font-semibold mb-1">Application Updates</h2>
-                <p className="text-sm text-muted-foreground">Check for online updates or perform manual local upgrades</p>
+                <p className="text-sm text-muted-foreground">
+                  Automatic updates via GitHub Releases using electron-updater
+                </p>
               </div>
 
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 rounded-xl bg-muted/30 border text-sm">
-                  <span className="font-semibold text-foreground">Installed Version</span>
-                  <span className="px-3 py-1 rounded-full bg-primary/10 text-primary font-bold text-xs">
-                    v{currentVersion}
-                  </span>
+                {/* Version Information */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl bg-muted/30 border space-y-1">
+                    <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
+                      Current Version
+                    </span>
+                    <div className="text-lg font-extrabold text-foreground">
+                      v{updateState.currentVersion}
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-muted/30 border space-y-1">
+                    <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
+                      Latest Version
+                    </span>
+                    <div className="text-lg font-extrabold text-primary">
+                      {updateState.latestVersion ? `v${updateState.latestVersion}` : `v${updateState.currentVersion}`}
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="text-sm font-medium block mb-1 text-foreground">Update Manifest URL</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={manifestUrl}
-                      onChange={(e) => setManifestUrl(e.target.value)}
-                      placeholder="https://raw.githubusercontent.com/Pritish229/MY-CRM/main/update.json"
-                      className="flex-1 px-3 py-2 rounded-lg border bg-background text-sm outline-none"
-                    />
+                {/* Status Indicator Banner */}
+                <div className="p-4 rounded-xl border bg-muted/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "p-2 rounded-lg shrink-0",
+                      updateState.status === 'update-available' && "bg-amber-500/10 text-amber-500",
+                      updateState.status === 'update-downloaded' && "bg-emerald-500/10 text-emerald-500",
+                      updateState.status === 'downloading' && "bg-blue-500/10 text-blue-500 animate-pulse",
+                      updateState.status === 'checking-for-update' && "bg-blue-500/10 text-blue-500",
+                      updateState.status === 'update-not-available' && "bg-emerald-500/10 text-emerald-500",
+                      updateState.status === 'error' && "bg-rose-500/10 text-rose-500",
+                      updateState.status === 'idle' && "bg-muted text-muted-foreground"
+                    )}>
+                      {updateState.status === 'checking-for-update' && <RefreshCw className="w-5 h-5 animate-spin" />}
+                      {updateState.status === 'update-available' && <AlertTriangle className="w-5 h-5" />}
+                      {updateState.status === 'update-not-available' && <CheckCircle2 className="w-5 h-5" />}
+                      {updateState.status === 'downloading' && <Download className="w-5 h-5 animate-bounce" />}
+                      {updateState.status === 'update-downloaded' && <CheckCircle2 className="w-5 h-5" />}
+                      {updateState.status === 'error' && <AlertTriangle className="w-5 h-5" />}
+                      {updateState.status === 'idle' && <Info className="w-5 h-5" />}
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-bold text-foreground">
+                        {updateState.status === 'checking-for-update' && 'Checking for updates...'}
+                        {updateState.status === 'update-available' && 'A new version is available.'}
+                        {updateState.status === 'update-not-available' && "You're using the latest version."}
+                        {updateState.status === 'downloading' && `Downloading update... (${updateState.progress || 0}%)`}
+                        {updateState.status === 'update-downloaded' && 'Update downloaded.'}
+                        {updateState.status === 'error' && 'Update Check Failed'}
+                        {updateState.status === 'idle' && 'Check for Application Updates'}
+                      </h4>
+
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {updateState.status === 'update-available' && 'Download now?'}
+                        {updateState.status === 'update-downloaded' && 'Restart now to install?'}
+                        {updateState.status === 'error' && (updateState.error || 'Unable to connect to release server.')}
+                        {updateState.status === 'update-not-available' && "You're using the latest version."}
+                        {updateState.status === 'idle' && 'Silent update checks run automatically on startup.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Primary Action Button */}
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    {updateState.status === 'update-available' && (
+                      <button
+                        type="button"
+                        onClick={handleDownloadUpdate}
+                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                      >
+                        <Download className="w-4 h-4" /> Download Now
+                      </button>
+                    )}
+
+                    {updateState.status === 'update-downloaded' && (
+                      <button
+                        type="button"
+                        onClick={handleRestartAndInstall}
+                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors cursor-pointer shadow-md"
+                      >
+                        <RefreshCw className="w-4 h-4" /> Restart and Install
+                      </button>
+                    )}
+
                     <button
                       type="button"
-                      onClick={async () => {
-                        await updateSetting('updateUrl', manifestUrl)
-                        toast.success('Update URL saved.')
-                      }}
-                      className="px-4 py-2 bg-secondary hover:bg-secondary/80 border text-secondary-foreground rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer"
+                      disabled={isCheckingUpdate || updateState.status === 'downloading'}
+                      onClick={handleCheckForUpdates}
+                      className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                     >
-                      Save URL
+                      <RefreshCw className={cn("w-4 h-4", (isCheckingUpdate || updateState.status === 'checking-for-update') && "animate-spin")} />
+                      {isCheckingUpdate || updateState.status === 'checking-for-update' ? 'Checking...' : 'Check for Updates'}
                     </button>
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                  <button
-                    type="button"
-                    disabled={isChecking || downloadProgress !== null}
-                    onClick={handleCheckForUpdates}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50 text-center"
-                  >
-                    <RefreshCw className={cn("w-4 h-4", isChecking && "animate-spin")} />
-                    {isChecking ? 'Checking for updates...' : 'Check Online Update'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isChecking || downloadProgress !== null}
-                    onClick={handleLocalUpdate}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-secondary hover:bg-secondary/80 border text-secondary-foreground text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50 text-center"
-                  >
-                    <FileDown className="w-4 h-4" />
-                    Install Local Executable (.exe)
-                  </button>
-                </div>
-
-                {updateError && (
-                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs">
-                    {updateError}
+                {/* Progress Bar during Download */}
+                {updateState.status === 'downloading' && (
+                  <div className="p-4 rounded-xl border bg-card space-y-2">
+                    <div className="flex justify-between text-xs font-medium">
+                      <span className="text-foreground font-semibold">Downloading update in background...</span>
+                      <span className="text-primary font-bold">{updateState.progress || 0}%</span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                      <div
+                        className="bg-primary h-full rounded-full transition-all duration-200"
+                        style={{ width: `${updateState.progress || 0}%` }}
+                      />
+                    </div>
                   </div>
                 )}
 
-                {updateInfo && (
-                  <div className="p-4 rounded-lg border bg-muted/25 space-y-3">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-foreground">
-                        {updateInfo.hasUpdate ? '🎉 New Version Available!' : '✨ Application is up to date'}
-                      </span>
-                      <span className="font-bold text-primary">v{updateInfo.latestVersion}</span>
+                {/* Release Notes */}
+                {updateState.releaseNotes && (
+                  <div className="space-y-1.5 pt-2">
+                    <label className="text-xs font-bold text-foreground uppercase tracking-wider block">
+                      Release Notes
+                    </label>
+                    <div className="p-4 rounded-xl border bg-muted/20 text-xs text-muted-foreground leading-relaxed whitespace-pre-line max-h-48 overflow-y-auto font-mono">
+                      {updateState.releaseNotes}
                     </div>
-
-                    {updateInfo.releaseNotes && (
-                      <div className="text-xs text-muted-foreground bg-background p-3 rounded border max-h-24 overflow-y-auto whitespace-pre-line leading-relaxed">
-                        {updateInfo.releaseNotes}
-                      </div>
-                    )}
-
-                    {updateInfo.hasUpdate && downloadProgress === null && (
-                      <button
-                        type="button"
-                        onClick={handleInstallRemoteUpdate}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors cursor-pointer text-center"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Download & Install Update
-                      </button>
-                    )}
-
-                    {downloadProgress !== null && (
-                      <div className="space-y-2 pt-1">
-                        <div className="flex justify-between text-xs font-medium">
-                          <span>Downloading Update...</span>
-                          <span>{downloadProgress}%</span>
-                        </div>
-                        <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                          <div
-                            className="bg-emerald-500 h-full rounded-full transition-all duration-150"
-                            style={{ width: `${downloadProgress}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -1630,8 +1640,9 @@ export function SettingsPage() {
               </h2>
               <div className="space-y-1.5 text-xs text-muted-foreground leading-relaxed">
                 <p><strong className="text-foreground">App Name:</strong> Project Workspace Manager (PWM)</p>
-                <p><strong className="text-foreground">Version:</strong> v{currentVersion}</p>
+                <p><strong className="text-foreground">Version:</strong> v{updateState.currentVersion}</p>
                 <p><strong className="text-foreground">Architecture:</strong> Offline-first SQLite + Electron + React 19 + Vite</p>
+                <p><strong className="text-foreground">Updater Provider:</strong> GitHub Releases (electron-updater)</p>
                 <p><strong className="text-foreground">License:</strong> MIT</p>
               </div>
             </section>

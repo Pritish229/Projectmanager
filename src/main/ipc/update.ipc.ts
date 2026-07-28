@@ -1,223 +1,179 @@
-import { app, ipcMain, dialog } from 'electron'
-import * as http from 'http'
-import * as https from 'https'
-import * as fs from 'fs'
-import { join } from 'path'
-import { parse as parseUrl } from 'url'
-import { spawn } from 'child_process'
+import { app, ipcMain, BrowserWindow } from 'electron'
+import { autoUpdater, UpdateInfo, ProgressInfo } from 'electron-updater'
 
-function isNewerVersion(current: string, latest: string): boolean {
-  const currentParts = current.replace(/^v/, '').split('.').map(Number)
-  const latestParts = latest.replace(/^v/, '').split('.').map(Number)
-  for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
-    const cur = currentParts[i] || 0
-    const lat = latestParts[i] || 0
-    if (lat > cur) return true
-    if (cur > lat) return false
-  }
-  return false
+// Configure autoUpdater settings
+autoUpdater.autoDownload = false
+autoUpdater.autoInstallOnAppQuit = true
+
+// Logging configuration
+autoUpdater.logger = console
+
+export interface UpdateStatusState {
+  status:
+    | 'idle'
+    | 'checking-for-update'
+    | 'update-available'
+    | 'update-not-available'
+    | 'downloading'
+    | 'update-downloaded'
+    | 'error'
+  currentVersion: string
+  latestVersion?: string
+  releaseNotes?: string
+  progress?: number
+  transferred?: number
+  total?: number
+  bytesPerSecond?: number
+  error?: string
 }
 
-function fetchManifest(urlStr: string): Promise<any> {
-  return new Promise((resolve, reject) => {
-    try {
-      const parsed = parseUrl(urlStr)
-      const protocol = parsed.protocol === 'https:' ? https : http
-      
-      const req = protocol.get(urlStr, (res) => {
-        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          resolve(fetchManifest(res.headers.location))
-          return
-        }
-        
-        if (res.statusCode !== 200) {
-          reject(new Error(`Server returned status code ${res.statusCode}`))
-          return
-        }
-        
-        let data = ''
-        res.on('data', (chunk) => {
-          data += chunk
-        })
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(data))
-          } catch (e) {
-            reject(new Error('Failed to parse manifest JSON'))
-          }
-        })
-      })
-      
-      req.on('error', (err) => {
-        reject(err)
-      })
-    } catch (err) {
-      reject(err)
+let currentState: UpdateStatusState = {
+  status: 'idle',
+  currentVersion: app.getVersion()
+}
+
+function broadcastUpdateStatus(stateUpdate: Partial<UpdateStatusState>): void {
+  currentState = { ...currentState, ...stateUpdate, currentVersion: app.getVersion() }
+  const windows = BrowserWindow.getAllWindows()
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('update:status-changed', currentState)
     }
-  })
-}
-
-function downloadWithRedirects(
-  urlStr: string,
-  destPath: string,
-  onProgress: (progress: number) => void,
-  onSuccess: () => void,
-  onError: (err: any) => void
-) {
-  try {
-    const parsed = parseUrl(urlStr)
-    const protocol = parsed.protocol === 'https:' ? https : http
-    
-    const req = protocol.get(urlStr, (res) => {
-      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        downloadWithRedirects(res.headers.location, destPath, onProgress, onSuccess, onError)
-        return
-      }
-      
-      if (res.statusCode !== 200) {
-        onError(new Error(`Server returned status code ${res.statusCode}`))
-        return
-      }
-      
-      const totalBytes = parseInt(res.headers['content-length'] || '0', 10)
-      let receivedBytes = 0
-      
-      const fileStream = fs.createWriteStream(destPath)
-      res.pipe(fileStream)
-      
-      res.on('data', (chunk) => {
-        receivedBytes += chunk.length
-        if (totalBytes > 0) {
-          const percent = Math.round((receivedBytes / totalBytes) * 100)
-          onProgress(percent)
-        }
-      })
-      
-      fileStream.on('finish', () => {
-        fileStream.close()
-        onSuccess()
-      })
-      
-      fileStream.on('error', (err) => {
-        fs.unlink(destPath, () => {})
-        onError(err)
-      })
-    })
-    
-    req.on('error', (err) => {
-      onError(err)
-    })
-  } catch (err) {
-    onError(err)
   }
 }
 
 export function registerUpdateHandlers(): void {
-  // Get version of packaged app
+  // Attach event listeners to electron-updater's autoUpdater
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[AutoUpdater] Checking for update...')
+    broadcastUpdateStatus({
+      status: 'checking-for-update',
+      error: undefined
+    })
+  })
+
+  autoUpdater.on('update-available', (info: UpdateInfo) => {
+    console.log('[AutoUpdater] Update available:', info.version)
+    let releaseNotesStr = ''
+    if (typeof info.releaseNotes === 'string') {
+      releaseNotesStr = info.releaseNotes
+    } else if (Array.isArray(info.releaseNotes)) {
+      releaseNotesStr = info.releaseNotes
+        .map((n) => (typeof n === 'string' ? n : n.note))
+        .join('\n')
+    }
+
+    broadcastUpdateStatus({
+      status: 'update-available',
+      latestVersion: info.version,
+      releaseNotes: releaseNotesStr,
+      error: undefined
+    })
+  })
+
+  autoUpdater.on('update-not-available', (info: UpdateInfo) => {
+    console.log('[AutoUpdater] Update not available. Current version is latest:', info.version)
+    broadcastUpdateStatus({
+      status: 'update-not-available',
+      latestVersion: info.version || app.getVersion(),
+      error: undefined
+    })
+  })
+
+  autoUpdater.on('error', (err: Error) => {
+    console.error('[AutoUpdater] Error:', err)
+    broadcastUpdateStatus({
+      status: 'error',
+      error: err.message || 'An error occurred while handling updates.'
+    })
+  })
+
+  autoUpdater.on('download-progress', (progressObj: ProgressInfo) => {
+    const percent = Math.round(progressObj.percent)
+    console.log(`[AutoUpdater] Download progress: ${percent}%`)
+    broadcastUpdateStatus({
+      status: 'downloading',
+      progress: percent,
+      transferred: progressObj.transferred,
+      total: progressObj.total,
+      bytesPerSecond: progressObj.bytesPerSecond
+    })
+  })
+
+  autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+    console.log('[AutoUpdater] Update downloaded:', info.version)
+    let releaseNotesStr = ''
+    if (typeof info.releaseNotes === 'string') {
+      releaseNotesStr = info.releaseNotes
+    } else if (Array.isArray(info.releaseNotes)) {
+      releaseNotesStr = info.releaseNotes
+        .map((n) => (typeof n === 'string' ? n : n.note))
+        .join('\n')
+    }
+
+    broadcastUpdateStatus({
+      status: 'update-downloaded',
+      latestVersion: info.version,
+      releaseNotes: releaseNotesStr,
+      progress: 100
+    })
+  })
+
+  // IPC Handlers exposed to Renderer
   ipcMain.handle('update:getVersion', () => {
     return app.getVersion()
   })
 
-  // Check for updates by fetching manifest
-  ipcMain.handle('update:checkForUpdates', async (_, url: string) => {
+  ipcMain.handle('update:getStatus', () => {
+    return { ...currentState, currentVersion: app.getVersion() }
+  })
+
+  ipcMain.handle('update:checkForUpdates', async () => {
     try {
-      const manifest = await fetchManifest(url)
-      const currentVersion = app.getVersion()
-      const hasUpdate = isNewerVersion(currentVersion, manifest.version)
-      
-      return {
-        hasUpdate,
-        currentVersion,
-        latestVersion: manifest.version,
-        releaseNotes: manifest.releaseNotes || '',
-        url: manifest.url || '',
-        success: true
-      }
+      console.log('[AutoUpdater] Manually checking for updates...')
+      broadcastUpdateStatus({ status: 'checking-for-update', error: undefined })
+      const result = await autoUpdater.checkForUpdates()
+      return { success: true, updateInfo: result?.updateInfo }
     } catch (err: any) {
-      console.error('[Update Check Error]', err)
-      return {
-        hasUpdate: false,
-        success: false,
-        error: err.message || 'Failed to retrieve update manifest'
-      }
-    }
-  })
-
-  // Download remote update and run installer
-  ipcMain.handle('update:installRemote', async (event, url: string) => {
-    const tempDir = app.getPath('temp')
-    const tempPath = join(tempDir, 'pwm-setup-update.exe')
-
-    if (fs.existsSync(tempPath)) {
-      try {
-        fs.unlinkSync(tempPath)
-      } catch (err) {
-        console.error('Failed to clear old update temp file:', err)
-      }
-    }
-
-    return new Promise((resolve) => {
-      downloadWithRedirects(
-        url,
-        tempPath,
-        (percent) => {
-          event.sender.send('update:download-progress', percent)
-        },
-        () => {
-          // Launch the update installer in background and exit
-          try {
-            const child = spawn(tempPath, [], {
-              detached: true,
-              stdio: 'ignore'
-            })
-            child.unref()
-            
-            setTimeout(() => {
-              app.quit()
-            }, 500)
-            
-            resolve({ success: true })
-          } catch (err: any) {
-            resolve({ success: false, error: `Failed to execute installer: ${err.message}` })
-          }
-        },
-        (err) => {
-          resolve({ success: false, error: err.message })
-        }
-      )
-    })
-  })
-
-  // Install update from a local file selector dialog
-  ipcMain.handle('update:installLocal', async () => {
-    const result = await dialog.showOpenDialog({
-      title: 'Select Update Installer Executable',
-      properties: ['openFile'],
-      filters: [
-        { name: 'Executables', extensions: ['exe'] }
-      ]
-    })
-    
-    if (result.canceled || !result.filePaths[0]) {
-      return { success: false, error: 'Cancelled' }
-    }
-
-    const filePath = result.filePaths[0]
-
-    try {
-      const child = spawn(filePath, [], {
-        detached: true,
-        stdio: 'ignore'
+      console.error('[AutoUpdater] Manual check error:', err)
+      broadcastUpdateStatus({
+        status: 'error',
+        error: err.message || 'Failed to check for updates'
       })
-      child.unref()
+      return { success: false, error: err.message || 'Failed to check for updates' }
+    }
+  })
 
-      setTimeout(() => {
-        app.quit()
-      }, 500)
-
+  ipcMain.handle('update:downloadUpdate', async () => {
+    try {
+      console.log('[AutoUpdater] Starting update download...')
+      broadcastUpdateStatus({ status: 'downloading', progress: 0 })
+      await autoUpdater.downloadUpdate()
       return { success: true }
     } catch (err: any) {
-      return { success: false, error: `Failed to execute local installer: ${err.message}` }
+      console.error('[AutoUpdater] Download error:', err)
+      broadcastUpdateStatus({
+        status: 'error',
+        error: err.message || 'Failed to download update'
+      })
+      return { success: false, error: err.message || 'Failed to download update' }
     }
   })
+
+  ipcMain.handle('update:restartAndInstall', () => {
+    console.log('[AutoUpdater] Quitting and installing update...')
+    setImmediate(() => {
+      autoUpdater.quitAndInstall(false, true)
+    })
+    return { success: true }
+  })
+
+  // Trigger silent check on startup after 5s delay if app is packaged
+  setTimeout(() => {
+    if (app.isPackaged) {
+      autoUpdater.checkForUpdates().catch((err) => {
+        console.warn('[AutoUpdater] Silent initial check error:', err.message)
+      })
+    }
+  }, 5000)
 }

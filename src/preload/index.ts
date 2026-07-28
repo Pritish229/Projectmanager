@@ -154,15 +154,17 @@ const api = {
 
   // App Update
   update: {
+    getAppVersion: () => ipcRenderer.invoke('update:getVersion'),
     getVersion: () => ipcRenderer.invoke('update:getVersion'),
-    checkForUpdates: (url: string) => ipcRenderer.invoke('update:checkForUpdates', url),
-    installRemote: (url: string) => ipcRenderer.invoke('update:installRemote', url),
-    installLocal: () => ipcRenderer.invoke('update:installLocal'),
-    onDownloadProgress: (callback: (progress: number) => void) => {
-      const listener = (_event: any, value: number) => callback(value)
-      ipcRenderer.on('update:download-progress', listener)
+    getStatus: () => ipcRenderer.invoke('update:getStatus'),
+    checkForUpdates: () => ipcRenderer.invoke('update:checkForUpdates'),
+    downloadUpdate: () => ipcRenderer.invoke('update:downloadUpdate'),
+    restartAndInstall: () => ipcRenderer.invoke('update:restartAndInstall'),
+    onStatusChange: (callback: (statusState: any) => void) => {
+      const listener = (_event: any, state: any) => callback(state)
+      ipcRenderer.on('update:status-changed', listener)
       return () => {
-        ipcRenderer.removeListener('update:download-progress', listener)
+        ipcRenderer.removeListener('update:status-changed', listener)
       }
     }
   },

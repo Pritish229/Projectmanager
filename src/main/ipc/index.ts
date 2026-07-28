@@ -14,6 +14,7 @@ import { registerClientHandlers } from './clients.ipc'
 import { registerUpdateHandlers } from './update.ipc'
 import { registerSearchHandlers } from './search.ipc'
 import { registerEmailHandlers } from './email.ipc'
+import { registerInvoiceHandlers } from './invoices.ipc'
 
 export function registerAllIpcHandlers(): void {
   registerProjectHandlers()
@@ -30,6 +31,7 @@ export function registerAllIpcHandlers(): void {
   registerReportHandlers()
   registerDashboardHandlers()
   registerEmailHandlers()
+  registerInvoiceHandlers()
   registerUpdateHandlers()
   registerSearchHandlers()
   

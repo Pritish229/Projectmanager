@@ -184,6 +184,27 @@ const api = {
     getProfilePass: (id: string) => ipcRenderer.invoke('email:getProfilePass', id)
   },
 
+  // Invoices
+  invoices: {
+    getAllTemplates: () => ipcRenderer.invoke('invoices:getAllTemplates'),
+    seedDefaultTemplates: () => ipcRenderer.invoke('invoices:seedDefaultTemplates'),
+    getTemplateById: (id: string) => ipcRenderer.invoke('invoices:getTemplateById', id),
+    createTemplate: (data: Record<string, unknown>) => ipcRenderer.invoke('invoices:createTemplate', data),
+    updateTemplate: (id: string, data: Record<string, unknown>) => ipcRenderer.invoke('invoices:updateTemplate', id, data),
+    deleteTemplate: (id: string) => ipcRenderer.invoke('invoices:deleteTemplate', id),
+    importTemplate: (templateJson: string) => ipcRenderer.invoke('invoices:importTemplate', templateJson),
+    exportTemplate: (id: string) => ipcRenderer.invoke('invoices:exportTemplate', id),
+
+    getByProject: (projectId: string) => ipcRenderer.invoke('invoices:getByProject', projectId),
+    getById: (id: string) => ipcRenderer.invoke('invoices:getById', id),
+    create: (data: Record<string, unknown>) => ipcRenderer.invoke('invoices:create', data),
+    update: (id: string, data: Record<string, unknown>) => ipcRenderer.invoke('invoices:update', id, data),
+    delete: (id: string) => ipcRenderer.invoke('invoices:delete', id),
+    updateStatus: (id: string, status: string) => ipcRenderer.invoke('invoices:updateStatus', id, status),
+    generatePdf: (id: string) => ipcRenderer.invoke('invoices:generatePdf', id),
+    sendEmail: (options: Record<string, unknown>) => ipcRenderer.invoke('invoices:sendEmail', options)
+  },
+
   // Shell utilities
   shell: {
     openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)

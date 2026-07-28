@@ -7,7 +7,7 @@ import { cn, formatDate } from '@/lib/utils'
 import {
   LayoutDashboard, ListTodo, FileText, CheckSquare, FolderOpen,
   StickyNote, Clock, Activity, Settings, Lock,
-  Building2, Calendar, Mail, Phone, ArrowLeft
+  Building2, Calendar, Mail, Phone, ArrowLeft, Receipt
 } from 'lucide-react'
 import { TodosTab } from '../components/TodosTab'
 import { NotesTab } from '../components/NotesTab'
@@ -17,11 +17,13 @@ import { ApprovalsTab } from '../components/ApprovalsTab'
 import { TimelineTab } from '../components/TimelineTab'
 import { FilesTab } from '../components/FilesTab'
 import { SettingsTab } from '../components/SettingsTab'
+import { InvoicesTab } from '../components/InvoicesTab'
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'todos', label: 'Todos', icon: ListTodo },
   { id: 'deliverables', label: 'Deliverables', icon: FileText },
+  { id: 'invoices', label: 'Invoices', icon: Receipt },
   { id: 'approvals', label: 'Approvals', icon: CheckSquare },
   { id: 'files', label: 'Files', icon: FolderOpen },
   { id: 'notes', label: 'Notes', icon: StickyNote },
@@ -142,6 +144,7 @@ export function WorkspacePage() {
         {activeTab === 'overview' && <OverviewTab project={currentProject} />}
         {activeTab === 'todos' && <TodosTab projectId={currentProject.id} isReadOnly={isReadOnly} />}
         {activeTab === 'deliverables' && <DeliverablesTab projectId={currentProject.id} isReadOnly={isReadOnly} />}
+        {activeTab === 'invoices' && <InvoicesTab projectId={currentProject.id} />}
         {activeTab === 'approvals' && <ApprovalsTab projectId={currentProject.id} isReadOnly={isReadOnly} />}
         {activeTab === 'files' && <FilesTab projectId={currentProject.id} isReadOnly={isReadOnly} />}
         {activeTab === 'notes' && <NotesTab projectId={currentProject.id} isReadOnly={isReadOnly} />}

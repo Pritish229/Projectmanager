@@ -94,7 +94,7 @@ export async function initDatabase(): Promise<void> {
     }
   }
 
-  const dbUrl = `file:${dbPath}`
+  const dbUrl = `file:${dbPath.replace(/\\/g, '/')}`
 
   prisma = new PrismaClient({
     datasources: {

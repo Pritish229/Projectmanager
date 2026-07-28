@@ -73,6 +73,7 @@ model Project {
   fileFolders  FileFolder[]
   activityLogs ActivityLog[]
   notifications Notification[]
+  invoices     Invoice[]
 
   @@map("projects")
 }
@@ -288,3 +289,71 @@ model Backup {
 
   @@map("backups")
 }
+
+// ──────────────────────────────────────────────
+// Invoice Templates
+// ──────────────────────────────────────────────
+model InvoiceTemplate {
+  id                 String   @id @default(uuid())
+  name               String
+  description        String   @default("")
+  isDefault          Boolean  @default(false)
+  layoutStyle        String   @default("modern") // modern, classic, compact, minimalist, creative
+  headerTitle        String   @default("INVOICE")
+  companyName        String   @default("")
+  companyAddress     String   @default("")
+  companyEmail       String   @default("")
+  companyPhone       String   @default("")
+  logoUrl            String   @default("")
+  primaryColor       String   @default("#3b82f6")
+  termsAndConditions String   @default("Payment due within 30 days of invoice date.")
+  notes              String   @default("Thank you for your business!")
+  placeholdersConfig String   @default("{}")
+  contentTemplate    String   @default("")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  invoices Invoice[]
+
+  @@map("invoice_templates")
+}
+
+// ──────────────────────────────────────────────
+// Invoices
+// ──────────────────────────────────────────────
+model Invoice {
+  id                 String   @id @default(uuid())
+  projectId          String
+  invoiceNumber      String
+  issueDate          DateTime @default(now())
+  dueDate            DateTime?
+  status             String   @default("draft") // draft, sent, paid, overdue, cancelled
+  currency           String   @default("USD")
+  currencySymbol     String   @default("$")
+  clientName         String   @default("")
+  clientEmail        String   @default("")
+  clientAddress      String   @default("")
+  companyName        String   @default("")
+  companyAddress     String   @default("")
+  companyEmail       String   @default("")
+  subtotal           Float    @default(0)
+  discountType       String   @default("percentage") // percentage, flat
+  discountValue      Float    @default(0)
+  discountAmount     Float    @default(0)
+  taxType            String   @default("percentage") // percentage, flat
+  taxValue           Float    @default(0)
+  taxAmount          Float    @default(0)
+  totalAmount        Float    @default(0)
+  termsAndConditions String   @default("")
+  notes              String   @default("")
+  templateId         String?
+  items              String   @default("[]") // JSON string array of items
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  project  Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  template InvoiceTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@map("invoices")
+}
+

@@ -38,10 +38,13 @@ import {
   Sliders,
   HardDrive,
   Check,
-  User
+  User,
+  Receipt
 } from 'lucide-react'
+import { useInvoiceStore } from '@/stores/useInvoiceStore'
+import { InvoiceTemplateEditorModal } from '../components/InvoiceTemplateEditorModal'
 
-type SettingsTab = 'profile' | 'email' | 'appearance' | 'backup' | 'storage' | 'security' | 'updates'
+type SettingsTab = 'profile' | 'invoices' | 'email' | 'appearance' | 'backup' | 'storage' | 'security' | 'updates'
 
 interface SmtpProfile {
   id?: string
@@ -97,6 +100,21 @@ export function SettingsPage() {
   const { theme, setTheme } = useUIStore()
   const { settings, fetchSettings, updateSetting } = useSettingsStore()
   const { changePin, changeSecurityPassword } = useAuthStore()
+  const { templates, fetchTemplates, seedDefaultTemplates, updateTemplate, deleteTemplate } = useInvoiceStore()
+
+  const [templateModalOpen, setTemplateModalOpen] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState<any>(null)
+  const [inlineEditId, setInlineEditId] = useState<string | null>(null)
+  const [inlineEditName, setInlineEditName] = useState('')
+
+  useEffect(() => {
+    fetchTemplates().then(() => {
+      const stateTemplates = useInvoiceStore.getState().templates
+      if (stateTemplates.length === 0) {
+        seedDefaultTemplates()
+      }
+    })
+  }, [fetchTemplates, seedDefaultTemplates])
 
   // User Profile Information State
   const [profileInfo, setProfileInfo] = useState({
@@ -490,10 +508,6 @@ export function SettingsPage() {
     setConfirmOpen(true)
   }
 
-  useEffect(() => {
-    fetchSettings()
-  }, [fetchSettings])
-
   const themes = [
     { value: 'light' as const, label: 'Light', icon: Sun },
     { value: 'dark' as const, label: 'Dark', icon: Moon },
@@ -502,6 +516,7 @@ export function SettingsPage() {
 
   const navTabs = [
     { id: 'profile' as SettingsTab, label: 'Profile Info', icon: User },
+    { id: 'invoices' as SettingsTab, label: 'Invoice Templates', icon: Receipt, badge: templates.length },
     { id: 'email' as SettingsTab, label: 'Email Accounts', icon: Mail, badge: smtpProfiles.length },
     { id: 'appearance' as SettingsTab, label: 'Appearance', icon: Sun },
     { id: 'backup' as SettingsTab, label: 'Auto Backup', icon: RefreshCw },
@@ -551,7 +566,223 @@ export function SettingsPage() {
       </div>
 
       {/* TAB CONTENT AREA (No outer page scroll, content is scrollable per tab) */}
-      <div className="flex-1 overflow-auto max-w-4xl min-h-0">
+      <div className="flex-1 overflow-auto w-full min-h-0">
+        {/* ─── TAB: INVOICE TEMPLATES ─── */}
+        {activeTab === 'invoices' && (
+          <div className="space-y-6 animate-fade-in pb-8">
+            <section className="rounded-xl border bg-card p-6 shadow-sm space-y-6">
+              <div className="flex items-center justify-between border-b pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500">
+                    <Receipt className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold">Invoice Templates & Customization</h2>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      Create, customize, import, and manage default invoice layouts with interactive placeholders.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      await seedDefaultTemplates()
+                      toast.success('Pre-built Themes Loaded', 'Added pre-built invoice themes to your template library.')
+                    }}
+                    className="px-3.5 py-2 text-xs font-semibold rounded-lg border hover:bg-accent flex items-center gap-2 transition-colors"
+                    title="Load all 8 pre-built themes"
+                  >
+                    <Sparkles className="w-4 h-4 text-primary" /> Load Pre-built Themes
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setEditingTemplate(null)
+                      setTemplateModalOpen(true)
+                    }}
+                    className="px-4 py-2 text-xs font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2 shadow transition-colors"
+                  >
+                    <Plus className="w-4 h-4" /> Create Custom Template
+                  </button>
+                </div>
+              </div>
+
+              {/* Template Cards Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {templates.map((tmpl) => (
+                  <div
+                    key={tmpl.id}
+                    className="border rounded-xl p-5 bg-background hover:border-primary/60 transition-all flex flex-col justify-between space-y-4 shadow-sm relative overflow-hidden group"
+                  >
+                    {/* Top Primary Color Accent Bar */}
+                    <div
+                      className="absolute top-0 left-0 right-0 h-1.5"
+                      style={{ backgroundColor: tmpl.primaryColor || '#3b82f6' }}
+                    />
+
+                    <div>
+                      {/* Theme Name Header with Rupee Icon & Click-to-Edit */}
+                      <div className="flex items-start justify-between gap-2 mb-2 pt-1">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <span
+                            className="w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm font-mono"
+                            style={{ backgroundColor: tmpl.primaryColor || '#3b82f6' }}
+                            title="Theme Symbol"
+                          >
+                            ₹
+                          </span>
+
+                          {inlineEditId === tmpl.id ? (
+                            <input
+                              type="text"
+                              autoFocus
+                              className="px-2 py-0.5 text-xs font-bold rounded border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary w-full"
+                              value={inlineEditName}
+                              onChange={(e) => setInlineEditName(e.target.value)}
+                              onKeyDown={async (e) => {
+                                if (e.key === 'Enter') {
+                                  if (inlineEditName.trim()) {
+                                    await updateTemplate(tmpl.id, { name: inlineEditName.trim() })
+                                    toast.success('Renamed', `Template renamed to "${inlineEditName.trim()}"`)
+                                  }
+                                  setInlineEditId(null)
+                                } else if (e.key === 'Escape') {
+                                  setInlineEditId(null)
+                                }
+                              }}
+                              onBlur={async () => {
+                                if (inlineEditName.trim() && inlineEditName !== tmpl.name) {
+                                  await updateTemplate(tmpl.id, { name: inlineEditName.trim() })
+                                  toast.success('Renamed', `Template renamed to "${inlineEditName.trim()}"`)
+                                }
+                                setInlineEditId(null)
+                              }}
+                            />
+                          ) : (
+                            <div
+                              onClick={() => {
+                                setInlineEditId(tmpl.id)
+                                setInlineEditName(tmpl.name)
+                              }}
+                              className="group/title flex items-center gap-1.5 cursor-pointer hover:bg-muted/50 px-1.5 py-0.5 rounded transition-colors min-w-0"
+                              title="Click to edit template name"
+                            >
+                              <h3 className="font-bold text-sm text-foreground truncate">{tmpl.name}</h3>
+                              <Edit3 className="w-3 h-3 text-muted-foreground shrink-0 opacity-0 group-hover/title:opacity-100 transition-opacity" />
+                            </div>
+                          )}
+
+                          {tmpl.isDefault && (
+                            <span className="px-2 py-0.5 text-[9px] font-black rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 uppercase shrink-0">
+                              Default
+                            </span>
+                          )}
+                        </div>
+
+                        <span className="text-[10px] font-mono capitalize px-2 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
+                          {tmpl.layoutStyle}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-muted-foreground line-clamp-1 mb-3">
+                        {tmpl.description || 'Custom invoice layout preset.'}
+                      </p>
+
+                      {/* Mini Invoice Visual Preview Box */}
+                      <div className="border rounded-lg p-3 bg-muted/20 space-y-2 relative overflow-hidden">
+                        <div
+                          className="absolute top-0 left-0 right-0 h-1"
+                          style={{ backgroundColor: tmpl.primaryColor || '#3b82f6' }}
+                        />
+                        
+                        <div className="flex items-center justify-between text-[11px] pt-1">
+                          <span className="font-extrabold" style={{ color: tmpl.primaryColor || '#3b82f6' }}>
+                            {tmpl.headerTitle || 'INVOICE'}
+                          </span>
+                          <span className="font-mono text-[10px] text-muted-foreground">#INV-2026-001</span>
+                        </div>
+
+                        <div className="text-[10px] text-muted-foreground flex justify-between">
+                          <span className="truncate max-w-[120px]">{tmpl.companyName || 'Sender Company'}</span>
+                          <span>Billed To: Client</span>
+                        </div>
+
+                        {/* Mini items line */}
+                        <div className="bg-card border rounded p-1.5 text-[10px] flex items-center justify-between font-mono">
+                          <span className="truncate max-w-[140px]">Software Services</span>
+                          <span>1x</span>
+                          <span className="font-bold text-foreground">₹1,250.00</span>
+                        </div>
+
+                        {/* Total Highlight */}
+                        <div className="flex items-center justify-between text-[10px] pt-1 border-t">
+                          <span className="text-muted-foreground">Total Due:</span>
+                          <span
+                            className="font-bold px-2 py-0.5 rounded text-white font-mono text-[11px]"
+                            style={{ backgroundColor: tmpl.primaryColor || '#3b82f6' }}
+                          >
+                            ₹1,250.00
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card Footer Actions */}
+                    <div className="flex items-center justify-between pt-3 border-t text-xs">
+                      <button
+                        onClick={async () => {
+                          await updateTemplate(tmpl.id, { isDefault: true })
+                          toast.success('Default Template Set', `"${tmpl.name}" is now default.`)
+                        }}
+                        disabled={tmpl.isDefault}
+                        className={cn(
+                          'text-[10px] font-semibold px-2 py-1 rounded transition-colors',
+                          tmpl.isDefault
+                            ? 'text-emerald-600 bg-emerald-500/10 cursor-default'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                        )}
+                      >
+                        {tmpl.isDefault ? '✓ System Default' : 'Set as Default'}
+                      </button>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => {
+                            setEditingTemplate(tmpl)
+                            setTemplateModalOpen(true)
+                          }}
+                          className="px-2.5 py-1 rounded-md bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 flex items-center gap-1 shadow-sm transition-colors"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" /> Customize
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setConfirmTitle('Delete Invoice Template')
+                            setConfirmDescription(`Are you sure you want to delete template "${tmpl.name}"?`)
+                            setConfirmAction(() => async () => {
+                              setConfirmOpen(false)
+                              await deleteTemplate(tmpl.id)
+                              toast.success(`Template "${tmpl.name}" deleted.`)
+                            })
+                            setConfirmOpen(true)
+                          }}
+                          className="p-1.5 rounded-md border border-red-500/20 text-red-500 hover:bg-red-500/10 transition-colors"
+                          title="Delete Template"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
+
         {/* ─── TAB 0: PROFILE INFORMATION ─── */}
         {activeTab === 'profile' && (
           <div className="space-y-6 animate-fade-in">
@@ -1052,7 +1283,7 @@ export function SettingsPage() {
               <h2 className="text-lg font-semibold mb-1">Appearance</h2>
               <p className="text-sm text-muted-foreground mb-4">Choose your preferred application theme</p>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {themes.map(t => (
                   <button
                     key={t.value}
@@ -1415,8 +1646,15 @@ export function SettingsPage() {
         title={confirmTitle}
         description={confirmDescription}
         confirmLabel="Proceed"
-        variant="info"
+        variant="default"
+      />
+
+      <InvoiceTemplateEditorModal
+        isOpen={templateModalOpen}
+        onClose={() => setTemplateModalOpen(false)}
+        template={editingTemplate}
       />
     </div>
   )
 }
+

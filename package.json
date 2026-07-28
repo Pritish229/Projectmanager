@@ -101,9 +101,6 @@
       "out/**/*"
     ],
     "asar": true,
-    "asarUnpack": [
-      "**/*.node"
-    ],
     "extraResources": [
       {
         "from": "prisma",

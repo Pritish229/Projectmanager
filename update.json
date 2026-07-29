@@ -1,5 +1,5 @@
 {
-  "version": "1.0.10",
+  "version": "1.0.11",
   "url": "https://github.com/Pritish229/Projectmanager/releases/download/v1.0.5/Project.Workspace.Manager.Setup.1.0.5.exe",
   "releaseNotes": "Updates in v1.0.5:\n- Fixed auto-updater release tag resolution and missing latest.yml handling.\n- Added explicit vPrefixedTagNameFormat configuration for GitHub Release updates."
 }

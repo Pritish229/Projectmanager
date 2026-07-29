@@ -140,4 +140,11 @@ export function registerNotificationHandlers(): void {
     await prisma.notification.delete({ where: { id } })
     return { success: true }
   })
+
+  // Delete all notifications
+  ipcMain.handle('notifications:deleteAll', async () => {
+    await prisma.notification.deleteMany()
+    return { success: true }
+  })
 }
+

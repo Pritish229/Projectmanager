@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-interface NotificationItem {
+export interface NotificationItem {
   id: string
   type: string
   title: string
@@ -8,6 +8,11 @@ interface NotificationItem {
   projectId: string | null
   read: boolean
   createdAt: string
+  project?: {
+    id: string
+    name: string
+    code?: string
+  } | null
 }
 
 interface NotificationState {
@@ -20,6 +25,7 @@ interface NotificationState {
   markAllRead: () => Promise<void>
   checkDeadlines: () => Promise<void>
   deleteNotification: (id: string) => Promise<void>
+  deleteAllNotifications: () => Promise<void>
 }
 
 export const useNotificationStore = create<NotificationState>((set, get) => ({
@@ -63,5 +69,12 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     await window.api.notifications.delete(id)
     await get().fetchNotifications()
     await get().fetchUnreadCount()
+  },
+
+  deleteAllNotifications: async () => {
+    await window.api.notifications.deleteAll()
+    await get().fetchNotifications()
+    set({ unreadCount: 0 })
   }
 }))
+

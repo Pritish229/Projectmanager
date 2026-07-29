@@ -574,16 +574,16 @@ export function registerInvoiceHandlers(): void {
 
     const primaryRgb = hexToRgb(primaryColorHex)
 
-    // Top Header Banner / Accent Line
+    // Top Accent Bar
     page.drawRectangle({
       x: 0,
-      y: height - 12,
+      y: height - 10,
       width: width,
-      height: 12,
+      height: 10,
       color: primaryRgb
     })
 
-    let currentY = height - 50
+    let currentY = height - 55
 
     // Header Title & Invoice Number
     const headerTitle = sanitizePdfText(invoiceData.template?.headerTitle || 'INVOICE')
@@ -595,44 +595,47 @@ export function registerInvoiceHandlers(): void {
       color: primaryRgb
     })
 
-    page.drawText(sanitizePdfText(`#${invoiceData.invoiceNumber}`), {
-      x: width - 200,
+    const invNumStr = sanitizePdfText(`#${invoiceData.invoiceNumber}`)
+    const invNumWidth = fontBold.widthOfTextAtSize(invNumStr, 14)
+    page.drawText(invNumStr, {
+      x: width - 40 - invNumWidth,
       y: currentY + 4,
       size: 14,
       font: fontBold,
-      color: rgb(0.2, 0.2, 0.2)
+      color: rgb(0.15, 0.2, 0.3)
     })
 
-    currentY -= 30
+    currentY -= 25
 
     // Divider
     page.drawLine({
       start: { x: 40, y: currentY },
       end: { x: width - 40, y: currentY },
       thickness: 1,
-      color: rgb(0.85, 0.85, 0.85)
+      color: rgb(0.88, 0.9, 0.93)
     })
 
     currentY -= 25
 
-    // Company (Sender) and Client (Recipient) details
+    // Company (Sender), Client (Recipient), and Details
     const compName = sanitizePdfText(invoiceData.companyName || invoiceData.template?.companyName || 'Sender Company')
     const compAddr = invoiceData.companyAddress || invoiceData.template?.companyAddress || ''
     const compEmail = sanitizePdfText(invoiceData.companyEmail || invoiceData.template?.companyEmail || '')
 
     // Left Box: FROM
-    page.drawText('FROM:', { x: 40, y: currentY, size: 10, font: fontBold, color: primaryRgb })
-    page.drawText(compName, { x: 40, y: currentY - 14, size: 11, font: fontBold })
-    let compY = currentY - 28
+    page.drawText('FROM:', { x: 40, y: currentY, size: 9, font: fontBold, color: primaryRgb })
+    page.drawText(compName, { x: 40, y: currentY - 14, size: 10, font: fontBold, color: rgb(0.1, 0.1, 0.1) })
+    let compY = currentY - 26
     if (compAddr) {
       const lines = compAddr.split('\n')
       lines.forEach((l: string) => {
-        page.drawText(sanitizePdfText(l), { x: 40, y: compY, size: 9, font: fontNormal, color: rgb(0.3, 0.3, 0.3) })
+        page.drawText(sanitizePdfText(l), { x: 40, y: compY, size: 9, font: fontNormal, color: rgb(0.35, 0.35, 0.35) })
         compY -= 12
       })
     }
     if (compEmail) {
-      page.drawText(compEmail, { x: 40, y: compY, size: 9, font: fontNormal, color: rgb(0.3, 0.3, 0.3) })
+      page.drawText(compEmail, { x: 40, y: compY, size: 9, font: fontNormal, color: rgb(0.35, 0.35, 0.35) })
+      compY -= 12
     }
 
     // Middle Box: BILL TO
@@ -640,18 +643,19 @@ export function registerInvoiceHandlers(): void {
     const clientAddr = invoiceData.clientAddress || ''
     const clientEmail = sanitizePdfText(invoiceData.clientEmail || '')
 
-    page.drawText('BILL TO:', { x: 230, y: currentY, size: 10, font: fontBold, color: primaryRgb })
-    page.drawText(clientName, { x: 230, y: currentY - 14, size: 11, font: fontBold })
-    let clientY = currentY - 28
+    page.drawText('BILL TO:', { x: 230, y: currentY, size: 9, font: fontBold, color: primaryRgb })
+    page.drawText(clientName, { x: 230, y: currentY - 14, size: 10, font: fontBold, color: rgb(0.1, 0.1, 0.1) })
+    let clientY = currentY - 26
     if (clientAddr) {
       const lines = clientAddr.split('\n')
       lines.forEach((l: string) => {
-        page.drawText(sanitizePdfText(l), { x: 230, y: clientY, size: 9, font: fontNormal, color: rgb(0.3, 0.3, 0.3) })
+        page.drawText(sanitizePdfText(l), { x: 230, y: clientY, size: 9, font: fontNormal, color: rgb(0.35, 0.35, 0.35) })
         clientY -= 12
       })
     }
     if (clientEmail) {
-      page.drawText(clientEmail, { x: 230, y: clientY, size: 9, font: fontNormal, color: rgb(0.3, 0.3, 0.3) })
+      page.drawText(clientEmail, { x: 230, y: clientY, size: 9, font: fontNormal, color: rgb(0.35, 0.35, 0.35) })
+      clientY -= 12
     }
 
     // Right Box: Dates & Details
@@ -659,124 +663,174 @@ export function registerInvoiceHandlers(): void {
     const dueStr = invoiceData.dueDate ? new Date(invoiceData.dueDate).toLocaleDateString() : 'Upon Receipt'
     const statusStr = (invoiceData.status || 'DRAFT').toUpperCase()
 
-    page.drawText('DETAILS:', { x: 420, y: currentY, size: 10, font: fontBold, color: primaryRgb })
-    page.drawText(`Issue Date: ${issueStr}`, { x: 420, y: currentY - 14, size: 9, font: fontNormal })
-    page.drawText(`Due Date: ${dueStr}`, { x: 420, y: currentY - 28, size: 9, font: fontNormal })
-    page.drawText(`Status: ${statusStr}`, { x: 420, y: currentY - 42, size: 9, font: fontBold, color: primaryRgb })
+    page.drawText('DETAILS:', { x: 410, y: currentY, size: 9, font: fontBold, color: primaryRgb })
+    page.drawText(`Issue Date: ${issueStr}`, { x: 410, y: currentY - 14, size: 9, font: fontNormal, color: rgb(0.2, 0.2, 0.2) })
+    page.drawText(`Due Date: ${dueStr}`, { x: 410, y: currentY - 26, size: 9, font: fontNormal, color: rgb(0.2, 0.2, 0.2) })
+    page.drawText(`Status: ${statusStr}`, { x: 410, y: currentY - 38, size: 9, font: fontBold, color: primaryRgb })
+    let detailsY = currentY - 50
 
-    currentY = Math.min(compY, clientY, currentY - 55) - 20
+    currentY = Math.min(compY, clientY, detailsY) - 25
 
     // Table Header
+    const tableHeaderHeight = 24
     page.drawRectangle({
       x: 40,
-      y: currentY - 16,
+      y: currentY - tableHeaderHeight,
       width: width - 80,
-      height: 22,
+      height: tableHeaderHeight,
       color: primaryRgb
     })
 
-    page.drawText('Description', { x: 50, y: currentY - 10, size: 9, font: fontBold, color: rgb(1, 1, 1) })
-    page.drawText('Qty', { x: 330, y: currentY - 10, size: 9, font: fontBold, color: rgb(1, 1, 1) })
-    page.drawText('Unit Price', { x: 400, y: currentY - 10, size: 9, font: fontBold, color: rgb(1, 1, 1) })
-    page.drawText('Amount', { x: 490, y: currentY - 10, size: 9, font: fontBold, color: rgb(1, 1, 1) })
+    const headerY = currentY - 16
+    page.drawText('Description', { x: 50, y: headerY, size: 9, font: fontBold, color: rgb(1, 1, 1) })
+    page.drawText('Qty', { x: 320, y: headerY, size: 9, font: fontBold, color: rgb(1, 1, 1) })
 
-    currentY -= 26
+    const priceHeadStr = 'Unit Price'
+    const priceHeadWidth = fontBold.widthOfTextAtSize(priceHeadStr, 9)
+    page.drawText(priceHeadStr, { x: 440 - priceHeadWidth, y: headerY, size: 9, font: fontBold, color: rgb(1, 1, 1) })
+
+    const amtHeadStr = 'Amount'
+    const amtHeadWidth = fontBold.widthOfTextAtSize(amtHeadStr, 9)
+    page.drawText(amtHeadStr, { x: width - 50 - amtHeadWidth, y: headerY, size: 9, font: fontBold, color: rgb(1, 1, 1) })
+
+    currentY -= (tableHeaderHeight + 2)
 
     // Items list
     const items = typeof invoiceData.items === 'string'
       ? JSON.parse(invoiceData.items || '[]')
       : (invoiceData.items || [])
 
+    const rowHeight = 22
     items.forEach((item: any, index: number) => {
-      const bg = index % 2 === 0 ? rgb(0.98, 0.98, 0.98) : rgb(1, 1, 1)
+      const bg = index % 2 === 0 ? rgb(0.97, 0.98, 0.99) : rgb(1, 1, 1)
       page.drawRectangle({
         x: 40,
-        y: currentY - 16,
+        y: currentY - rowHeight,
         width: width - 80,
-        height: 20,
+        height: rowHeight,
         color: bg
       })
 
-      const desc = sanitizePdfText((item.description || 'Item').slice(0, 45))
+      // Bottom row border
+      page.drawLine({
+        start: { x: 40, y: currentY - rowHeight },
+        end: { x: width - 40, y: currentY - rowHeight },
+        thickness: 0.5,
+        color: rgb(0.9, 0.9, 0.92)
+      })
+
+      const itemY = currentY - 15
+      const desc = sanitizePdfText((item.description || 'Item').slice(0, 48))
       const qty = (item.quantity || 1).toString()
-      const price = sanitizePdfText(`${sym}${Number(item.unitPrice || 0).toFixed(2)}`)
-      const amt = sanitizePdfText(`${sym}${Number(item.amount || 0).toFixed(2)}`)
+      const priceVal = sanitizePdfText(`${sym}${Number(item.unitPrice || 0).toFixed(2)}`)
+      const amtVal = sanitizePdfText(`${sym}${Number(item.amount || 0).toFixed(2)}`)
 
-      page.drawText(desc, { x: 50, y: currentY - 10, size: 9, font: fontNormal })
-      page.drawText(qty, { x: 335, y: currentY - 10, size: 9, font: fontNormal })
-      page.drawText(price, { x: 400, y: currentY - 10, size: 9, font: fontNormal })
-      page.drawText(amt, { x: 490, y: currentY - 10, size: 9, font: fontNormal })
+      page.drawText(desc, { x: 50, y: itemY, size: 9, font: fontNormal, color: rgb(0.15, 0.15, 0.15) })
+      page.drawText(qty, { x: 325, y: itemY, size: 9, font: fontNormal, color: rgb(0.2, 0.2, 0.2) })
 
-      currentY -= 22
+      const pW = fontNormal.widthOfTextAtSize(priceVal, 9)
+      page.drawText(priceVal, { x: 440 - pW, y: itemY, size: 9, font: fontNormal, color: rgb(0.2, 0.2, 0.2) })
+
+      const aW = fontNormal.widthOfTextAtSize(amtVal, 9)
+      page.drawText(amtVal, { x: width - 50 - aW, y: itemY, size: 9, font: fontNormal, color: rgb(0.1, 0.1, 0.1) })
+
+      currentY -= rowHeight
     })
 
-    currentY -= 15
+    currentY -= 25 // Clean gap after items table before totals section
 
-    // Totals Box (Right aligned)
-    const totalBoxX = 350
-    page.drawText('Subtotal:', { x: totalBoxX, y: currentY, size: 10, font: fontNormal })
-    page.drawText(sanitizePdfText(`${sym}${Number(invoiceData.subtotal || 0).toFixed(2)}`), { x: width - 110, y: currentY, size: 10, font: fontNormal })
-    currentY -= 16
+    // ─────────────────────────────────────────────────────────────
+    // Totals Section (Subtotal, Discount, Tax, Grand Total)
+    // ─────────────────────────────────────────────────────────────
+    const labelX = 330
+    const valueRightX = width - 50
 
+    // Subtotal Row
+    const subtotalStr = sanitizePdfText(`${sym}${Number(invoiceData.subtotal || 0).toFixed(2)}`)
+    const subtotalW = fontBold.widthOfTextAtSize(subtotalStr, 9.5)
+
+    page.drawText('Subtotal:', { x: labelX, y: currentY, size: 9.5, font: fontNormal, color: rgb(0.3, 0.3, 0.3) })
+    page.drawText(subtotalStr, { x: valueRightX - subtotalW, y: currentY, size: 9.5, font: fontBold, color: rgb(0.15, 0.15, 0.15) })
+    currentY -= 18
+
+    // Discount Row (if any)
     if (invoiceData.discountAmount > 0) {
       const discLabel = invoiceData.discountType === 'percentage'
         ? `Discount (${invoiceData.discountValue}%):`
         : 'Discount:'
-      page.drawText(discLabel, { x: totalBoxX, y: currentY, size: 10, font: fontNormal, color: rgb(0.8, 0.2, 0.2) })
-      page.drawText(sanitizePdfText(`-${sym}${Number(invoiceData.discountAmount || 0).toFixed(2)}`), { x: width - 110, y: currentY, size: 10, font: fontNormal, color: rgb(0.8, 0.2, 0.2) })
-      currentY -= 16
+      const discStr = sanitizePdfText(`-${sym}${Number(invoiceData.discountAmount || 0).toFixed(2)}`)
+      const discW = fontBold.widthOfTextAtSize(discStr, 9.5)
+
+      page.drawText(discLabel, { x: labelX, y: currentY, size: 9.5, font: fontNormal, color: rgb(0.8, 0.2, 0.2) })
+      page.drawText(discStr, { x: valueRightX - discW, y: currentY, size: 9.5, font: fontBold, color: rgb(0.8, 0.2, 0.2) })
+      currentY -= 18
     }
 
+    // Tax Row (if any)
     if (invoiceData.taxAmount > 0) {
       const taxLabel = invoiceData.taxType === 'percentage'
         ? `Tax (${invoiceData.taxValue}%):`
         : 'Tax:'
-      page.drawText(taxLabel, { x: totalBoxX, y: currentY, size: 10, font: fontNormal })
-      page.drawText(sanitizePdfText(`+${sym}${Number(invoiceData.taxAmount || 0).toFixed(2)}`), { x: width - 110, y: currentY, size: 10, font: fontNormal })
-      currentY -= 16
+      const taxStr = sanitizePdfText(`+${sym}${Number(invoiceData.taxAmount || 0).toFixed(2)}`)
+      const taxW = fontBold.widthOfTextAtSize(taxStr, 9.5)
+
+      page.drawText(taxLabel, { x: labelX, y: currentY, size: 9.5, font: fontNormal, color: rgb(0.3, 0.3, 0.3) })
+      page.drawText(taxStr, { x: valueRightX - taxW, y: currentY, size: 9.5, font: fontBold, color: rgb(0.15, 0.15, 0.15) })
+      currentY -= 18
     }
 
-    // Grand Total Highlight
+    currentY -= 6 // Extra gap before Total Due Box
+
+    // ─────────────────────────────────────────────────────────────
+    // Grand Total Highlight Banner (NO OVERLAP!)
+    // ─────────────────────────────────────────────────────────────
+    const totalBoxHeight = 28
+    const totalBoxWidth = width - 40 - (labelX - 15)
+
     page.drawRectangle({
-      x: totalBoxX - 10,
-      y: currentY - 8,
-      width: width - totalBoxX - 30,
-      height: 24,
+      x: labelX - 15,
+      y: currentY - totalBoxHeight,
+      width: totalBoxWidth,
+      height: totalBoxHeight,
       color: primaryRgb
     })
 
-    page.drawText('Total Due:', { x: totalBoxX, y: currentY, size: 11, font: fontBold, color: rgb(1, 1, 1) })
-    page.drawText(sanitizePdfText(`${sym}${Number(invoiceData.totalAmount || 0).toFixed(2)}`), { x: width - 110, y: currentY, size: 11, font: fontBold, color: rgb(1, 1, 1) })
+    const totalTextY = currentY - 18
+    page.drawText('Total Due:', { x: labelX - 5, y: totalTextY, size: 11, font: fontBold, color: rgb(1, 1, 1) })
 
-    currentY -= 45
+    const totalValStr = sanitizePdfText(`${sym}${Number(invoiceData.totalAmount || 0).toFixed(2)}`)
+    const totalValW = fontBold.widthOfTextAtSize(totalValStr, 12)
+    page.drawText(totalValStr, { x: valueRightX - totalValW, y: totalTextY, size: 12, font: fontBold, color: rgb(1, 1, 1) })
+
+    currentY -= (totalBoxHeight + 35)
 
     // Terms and Conditions
     if (invoiceData.termsAndConditions) {
-      page.drawText('Terms & Conditions:', { x: 40, y: currentY, size: 10, font: fontBold, color: primaryRgb })
+      page.drawText('Terms & Conditions:', { x: 40, y: currentY, size: 9.5, font: fontBold, color: primaryRgb })
       currentY -= 14
       const termLines = invoiceData.termsAndConditions.split('\n')
       termLines.forEach((t: string) => {
-        page.drawText(sanitizePdfText(t), { x: 40, y: currentY, size: 8, font: fontNormal, color: rgb(0.4, 0.4, 0.4) })
-        currentY -= 11
+        page.drawText(sanitizePdfText(t), { x: 40, y: currentY, size: 8.5, font: fontNormal, color: rgb(0.4, 0.4, 0.4) })
+        currentY -= 12
       })
-      currentY -= 10
+      currentY -= 12
     }
 
     // Notes
     if (invoiceData.notes) {
-      page.drawText('Notes / Payment Instructions:', { x: 40, y: currentY, size: 10, font: fontBold, color: primaryRgb })
+      page.drawText('Notes / Payment Instructions:', { x: 40, y: currentY, size: 9.5, font: fontBold, color: primaryRgb })
       currentY -= 14
       const noteLines = invoiceData.notes.split('\n')
       noteLines.forEach((n: string) => {
-        page.drawText(sanitizePdfText(n), { x: 40, y: currentY, size: 8, font: fontNormal, color: rgb(0.4, 0.4, 0.4) })
-        currentY -= 11
+        page.drawText(sanitizePdfText(n), { x: 40, y: currentY, size: 8.5, font: fontNormal, color: rgb(0.4, 0.4, 0.4) })
+        currentY -= 12
       })
     }
 
     // Footer
     page.drawText('Generated by Project Workspace Manager', {
-      x: width / 2 - 90,
-      y: 20,
+      x: width / 2 - 85,
+      y: 25,
       size: 8,
       font: fontNormal,
       color: rgb(0.6, 0.6, 0.6)

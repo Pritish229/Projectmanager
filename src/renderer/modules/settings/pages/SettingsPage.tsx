@@ -116,6 +116,17 @@ export function SettingsPage() {
     })
   }, [fetchTemplates, seedDefaultTemplates])
 
+  useEffect(() => {
+    if (activeTab === 'invoices') {
+      fetchTemplates().then(() => {
+        const stateTemplates = useInvoiceStore.getState().templates
+        if (stateTemplates.length === 0) {
+          seedDefaultTemplates()
+        }
+      })
+    }
+  }, [activeTab, fetchTemplates, seedDefaultTemplates])
+
   // User Profile Information State
   const [profileInfo, setProfileInfo] = useState({
     name: '',

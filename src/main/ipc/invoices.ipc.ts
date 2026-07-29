@@ -180,9 +180,73 @@ const DEFAULT_TEMPLATES = [
 export function registerInvoiceHandlers(): void {
   const prisma = getPrisma()
 
+  // Auto-create missing invoice tables on legacy SQLite databases
+  const ensureInvoiceTablesExist = async () => {
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "invoice_templates" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "name" TEXT NOT NULL,
+          "description" TEXT NOT NULL DEFAULT '',
+          "isDefault" BOOLEAN NOT NULL DEFAULT false,
+          "layoutStyle" TEXT NOT NULL DEFAULT 'modern',
+          "headerTitle" TEXT NOT NULL DEFAULT 'INVOICE',
+          "companyName" TEXT NOT NULL DEFAULT '',
+          "companyAddress" TEXT NOT NULL DEFAULT '',
+          "companyEmail" TEXT NOT NULL DEFAULT '',
+          "companyPhone" TEXT NOT NULL DEFAULT '',
+          "logoUrl" TEXT NOT NULL DEFAULT '',
+          "primaryColor" TEXT NOT NULL DEFAULT '#3b82f6',
+          "termsAndConditions" TEXT NOT NULL DEFAULT 'Payment due within 30 days of invoice date.',
+          "notes" TEXT NOT NULL DEFAULT 'Thank you for your business!',
+          "placeholdersConfig" TEXT NOT NULL DEFAULT '{}',
+          "contentTemplate" TEXT NOT NULL DEFAULT '',
+          "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `)
+
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "invoices" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "projectId" TEXT NOT NULL,
+          "invoiceNumber" TEXT NOT NULL,
+          "issueDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "dueDate" DATETIME,
+          "status" TEXT NOT NULL DEFAULT 'draft',
+          "currency" TEXT NOT NULL DEFAULT 'USD',
+          "currencySymbol" TEXT NOT NULL DEFAULT '$',
+          "clientName" TEXT NOT NULL DEFAULT '',
+          "clientEmail" TEXT NOT NULL DEFAULT '',
+          "clientAddress" TEXT NOT NULL DEFAULT '',
+          "companyName" TEXT NOT NULL DEFAULT '',
+          "companyAddress" TEXT NOT NULL DEFAULT '',
+          "companyEmail" TEXT NOT NULL DEFAULT '',
+          "subtotal" REAL NOT NULL DEFAULT 0,
+          "discountType" TEXT NOT NULL DEFAULT 'percentage',
+          "discountValue" REAL NOT NULL DEFAULT 0,
+          "discountAmount" REAL NOT NULL DEFAULT 0,
+          "taxType" TEXT NOT NULL DEFAULT 'percentage',
+          "taxValue" REAL NOT NULL DEFAULT 0,
+          "taxAmount" REAL NOT NULL DEFAULT 0,
+          "totalAmount" REAL NOT NULL DEFAULT 0,
+          "termsAndConditions" TEXT NOT NULL DEFAULT '',
+          "notes" TEXT NOT NULL DEFAULT '',
+          "templateId" TEXT,
+          "items" TEXT NOT NULL DEFAULT '[]',
+          "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `)
+    } catch (err) {
+      console.error('[Invoice IPC] ensureInvoiceTablesExist error:', err)
+    }
+  }
+
   // Seed default templates if database has no templates
   const ensureDefaultTemplates = async () => {
     try {
+      await ensureInvoiceTablesExist()
       const count = await prisma.invoiceTemplate.count()
       if (count === 0) {
         for (const tmpl of DEFAULT_TEMPLATES) {
@@ -196,6 +260,7 @@ export function registerInvoiceHandlers(): void {
 
   // Explicit re-seed all 8 pre-built default templates
   ipcMain.handle('invoices:seedDefaultTemplates', async () => {
+    await ensureInvoiceTablesExist()
     for (const tmpl of DEFAULT_TEMPLATES) {
       const existing = await prisma.invoiceTemplate.findFirst({
         where: { name: tmpl.name }
@@ -211,6 +276,7 @@ export function registerInvoiceHandlers(): void {
   // Invoice Templates IPC
   // ─────────────────────────────────────────────────────────────
   ipcMain.handle('invoices:getAllTemplates', async () => {
+    await ensureInvoiceTablesExist()
     await ensureDefaultTemplates()
     return await prisma.invoiceTemplate.findMany({
       orderBy: { createdAt: 'asc' }
@@ -325,6 +391,7 @@ export function registerInvoiceHandlers(): void {
   // Project Invoices IPC
   // ─────────────────────────────────────────────────────────────
   ipcMain.handle('invoices:getByProject', async (_, projectId: string) => {
+    await ensureInvoiceTablesExist()
     return await prisma.invoice.findMany({
       where: { projectId },
       include: { template: true, project: { include: { client: true } } },
@@ -333,6 +400,7 @@ export function registerInvoiceHandlers(): void {
   })
 
   ipcMain.handle('invoices:getById', async (_, id: string) => {
+    await ensureInvoiceTablesExist()
     return await prisma.invoice.findUnique({
       where: { id },
       include: { template: true, project: { include: { client: true } } }
@@ -340,6 +408,7 @@ export function registerInvoiceHandlers(): void {
   })
 
   ipcMain.handle('invoices:create', async (_, data: any) => {
+    await ensureInvoiceTablesExist()
     const items = Array.isArray(data.items) ? data.items : []
     const subtotal = items.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0)
 
@@ -469,6 +538,16 @@ export function registerInvoiceHandlers(): void {
     return { success: true }
   })
 
+  function sanitizePdfText(text: string): string {
+    if (!text) return ''
+    let cleaned = text
+      .replace(/₹/g, 'Rs. ')
+      .replace(/€/g, 'EUR ')
+      .replace(/£/g, 'GBP ')
+      .replace(/¥/g, 'JPY ')
+    return cleaned.replace(/[^\x00-\xFF]/g, '')
+  }
+
   // Helper to construct PDF buffer using pdf-lib
   async function generateInvoicePdfBuffer(invoiceData: any): Promise<Uint8Array> {
     const pdfDoc = await PDFDocument.create()
@@ -478,7 +557,8 @@ export function registerInvoiceHandlers(): void {
     const fontNormal = await pdfDoc.embedFont(StandardFonts.Helvetica)
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
 
-    const sym = invoiceData.currencySymbol || '$'
+    const rawSym = invoiceData.currencySymbol || '$'
+    const sym = sanitizePdfText(rawSym) || '$'
     const primaryColorHex = invoiceData.template?.primaryColor || '#3b82f6'
 
     // Convert hex color to rgb
@@ -506,7 +586,7 @@ export function registerInvoiceHandlers(): void {
     let currentY = height - 50
 
     // Header Title & Invoice Number
-    const headerTitle = invoiceData.template?.headerTitle || 'INVOICE'
+    const headerTitle = sanitizePdfText(invoiceData.template?.headerTitle || 'INVOICE')
     page.drawText(headerTitle, {
       x: 40,
       y: currentY,
@@ -515,7 +595,7 @@ export function registerInvoiceHandlers(): void {
       color: primaryRgb
     })
 
-    page.drawText(`#${invoiceData.invoiceNumber}`, {
+    page.drawText(sanitizePdfText(`#${invoiceData.invoiceNumber}`), {
       x: width - 200,
       y: currentY + 4,
       size: 14,
@@ -536,9 +616,9 @@ export function registerInvoiceHandlers(): void {
     currentY -= 25
 
     // Company (Sender) and Client (Recipient) details
-    const compName = invoiceData.companyName || invoiceData.template?.companyName || 'Sender Company'
+    const compName = sanitizePdfText(invoiceData.companyName || invoiceData.template?.companyName || 'Sender Company')
     const compAddr = invoiceData.companyAddress || invoiceData.template?.companyAddress || ''
-    const compEmail = invoiceData.companyEmail || invoiceData.template?.companyEmail || ''
+    const compEmail = sanitizePdfText(invoiceData.companyEmail || invoiceData.template?.companyEmail || '')
 
     // Left Box: FROM
     page.drawText('FROM:', { x: 40, y: currentY, size: 10, font: fontBold, color: primaryRgb })
@@ -547,7 +627,7 @@ export function registerInvoiceHandlers(): void {
     if (compAddr) {
       const lines = compAddr.split('\n')
       lines.forEach((l: string) => {
-        page.drawText(l, { x: 40, y: compY, size: 9, font: fontNormal, color: rgb(0.3, 0.3, 0.3) })
+        page.drawText(sanitizePdfText(l), { x: 40, y: compY, size: 9, font: fontNormal, color: rgb(0.3, 0.3, 0.3) })
         compY -= 12
       })
     }
@@ -556,9 +636,9 @@ export function registerInvoiceHandlers(): void {
     }
 
     // Middle Box: BILL TO
-    const clientName = invoiceData.clientName || 'Valued Client'
+    const clientName = sanitizePdfText(invoiceData.clientName || 'Valued Client')
     const clientAddr = invoiceData.clientAddress || ''
-    const clientEmail = invoiceData.clientEmail || ''
+    const clientEmail = sanitizePdfText(invoiceData.clientEmail || '')
 
     page.drawText('BILL TO:', { x: 230, y: currentY, size: 10, font: fontBold, color: primaryRgb })
     page.drawText(clientName, { x: 230, y: currentY - 14, size: 11, font: fontBold })
@@ -566,7 +646,7 @@ export function registerInvoiceHandlers(): void {
     if (clientAddr) {
       const lines = clientAddr.split('\n')
       lines.forEach((l: string) => {
-        page.drawText(l, { x: 230, y: clientY, size: 9, font: fontNormal, color: rgb(0.3, 0.3, 0.3) })
+        page.drawText(sanitizePdfText(l), { x: 230, y: clientY, size: 9, font: fontNormal, color: rgb(0.3, 0.3, 0.3) })
         clientY -= 12
       })
     }
@@ -617,10 +697,10 @@ export function registerInvoiceHandlers(): void {
         color: bg
       })
 
-      const desc = (item.description || 'Item').slice(0, 45)
+      const desc = sanitizePdfText((item.description || 'Item').slice(0, 45))
       const qty = (item.quantity || 1).toString()
-      const price = `${sym}${Number(item.unitPrice || 0).toFixed(2)}`
-      const amt = `${sym}${Number(item.amount || 0).toFixed(2)}`
+      const price = sanitizePdfText(`${sym}${Number(item.unitPrice || 0).toFixed(2)}`)
+      const amt = sanitizePdfText(`${sym}${Number(item.amount || 0).toFixed(2)}`)
 
       page.drawText(desc, { x: 50, y: currentY - 10, size: 9, font: fontNormal })
       page.drawText(qty, { x: 335, y: currentY - 10, size: 9, font: fontNormal })
@@ -635,7 +715,7 @@ export function registerInvoiceHandlers(): void {
     // Totals Box (Right aligned)
     const totalBoxX = 350
     page.drawText('Subtotal:', { x: totalBoxX, y: currentY, size: 10, font: fontNormal })
-    page.drawText(`${sym}${Number(invoiceData.subtotal || 0).toFixed(2)}`, { x: width - 110, y: currentY, size: 10, font: fontNormal })
+    page.drawText(sanitizePdfText(`${sym}${Number(invoiceData.subtotal || 0).toFixed(2)}`), { x: width - 110, y: currentY, size: 10, font: fontNormal })
     currentY -= 16
 
     if (invoiceData.discountAmount > 0) {
@@ -643,7 +723,7 @@ export function registerInvoiceHandlers(): void {
         ? `Discount (${invoiceData.discountValue}%):`
         : 'Discount:'
       page.drawText(discLabel, { x: totalBoxX, y: currentY, size: 10, font: fontNormal, color: rgb(0.8, 0.2, 0.2) })
-      page.drawText(`-${sym}${Number(invoiceData.discountAmount || 0).toFixed(2)}`, { x: width - 110, y: currentY, size: 10, font: fontNormal, color: rgb(0.8, 0.2, 0.2) })
+      page.drawText(sanitizePdfText(`-${sym}${Number(invoiceData.discountAmount || 0).toFixed(2)}`), { x: width - 110, y: currentY, size: 10, font: fontNormal, color: rgb(0.8, 0.2, 0.2) })
       currentY -= 16
     }
 
@@ -652,7 +732,7 @@ export function registerInvoiceHandlers(): void {
         ? `Tax (${invoiceData.taxValue}%):`
         : 'Tax:'
       page.drawText(taxLabel, { x: totalBoxX, y: currentY, size: 10, font: fontNormal })
-      page.drawText(`+${sym}${Number(invoiceData.taxAmount || 0).toFixed(2)}`, { x: width - 110, y: currentY, size: 10, font: fontNormal })
+      page.drawText(sanitizePdfText(`+${sym}${Number(invoiceData.taxAmount || 0).toFixed(2)}`), { x: width - 110, y: currentY, size: 10, font: fontNormal })
       currentY -= 16
     }
 
@@ -666,7 +746,7 @@ export function registerInvoiceHandlers(): void {
     })
 
     page.drawText('Total Due:', { x: totalBoxX, y: currentY, size: 11, font: fontBold, color: rgb(1, 1, 1) })
-    page.drawText(`${sym}${Number(invoiceData.totalAmount || 0).toFixed(2)}`, { x: width - 110, y: currentY, size: 11, font: fontBold, color: rgb(1, 1, 1) })
+    page.drawText(sanitizePdfText(`${sym}${Number(invoiceData.totalAmount || 0).toFixed(2)}`), { x: width - 110, y: currentY, size: 11, font: fontBold, color: rgb(1, 1, 1) })
 
     currentY -= 45
 
@@ -676,7 +756,7 @@ export function registerInvoiceHandlers(): void {
       currentY -= 14
       const termLines = invoiceData.termsAndConditions.split('\n')
       termLines.forEach((t: string) => {
-        page.drawText(t, { x: 40, y: currentY, size: 8, font: fontNormal, color: rgb(0.4, 0.4, 0.4) })
+        page.drawText(sanitizePdfText(t), { x: 40, y: currentY, size: 8, font: fontNormal, color: rgb(0.4, 0.4, 0.4) })
         currentY -= 11
       })
       currentY -= 10
@@ -688,7 +768,7 @@ export function registerInvoiceHandlers(): void {
       currentY -= 14
       const noteLines = invoiceData.notes.split('\n')
       noteLines.forEach((n: string) => {
-        page.drawText(n, { x: 40, y: currentY, size: 8, font: fontNormal, color: rgb(0.4, 0.4, 0.4) })
+        page.drawText(sanitizePdfText(n), { x: 40, y: currentY, size: 8, font: fontNormal, color: rgb(0.4, 0.4, 0.4) })
         currentY -= 11
       })
     }
@@ -707,26 +787,32 @@ export function registerInvoiceHandlers(): void {
 
   // Generate & Save PDF file to disk
   ipcMain.handle('invoices:generatePdf', async (_, invoiceId: string) => {
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: invoiceId },
-      include: { template: true }
-    })
-    if (!invoice) return { success: false, error: 'Invoice not found' }
+    try {
+      await ensureInvoiceTablesExist()
+      const invoice = await prisma.invoice.findUnique({
+        where: { id: invoiceId },
+        include: { template: true }
+      })
+      if (!invoice) return { success: false, error: 'Invoice not found' }
 
-    const pdfBytes = await generateInvoicePdfBuffer(invoice)
+      const pdfBytes = await generateInvoicePdfBuffer(invoice)
 
-    const win = BrowserWindow.getFocusedWindow()
-    const { filePath } = await dialog.showSaveDialog(win || ({} as any), {
-      title: 'Save Invoice PDF',
-      defaultPath: `Invoice_${invoice.invoiceNumber}.pdf`,
-      filters: [{ name: 'PDF Documents', extensions: ['pdf'] }]
-    })
+      const win = BrowserWindow.getFocusedWindow()
+      const { filePath } = await dialog.showSaveDialog(win || ({} as any), {
+        title: 'Save Invoice PDF',
+        defaultPath: `Invoice_${invoice.invoiceNumber}.pdf`,
+        filters: [{ name: 'PDF Documents', extensions: ['pdf'] }]
+      })
 
-    if (!filePath) return { success: false, canceled: true }
+      if (!filePath) return { success: false, canceled: true }
 
-    const fs = require('fs')
-    fs.writeFileSync(filePath, Buffer.from(pdfBytes))
-    return { success: true, filePath }
+      const fs = require('fs')
+      fs.writeFileSync(filePath, Buffer.from(pdfBytes))
+      return { success: true, filePath }
+    } catch (err: any) {
+      console.error('[Invoice IPC] generatePdf error:', err)
+      return { success: false, error: err.message || 'Failed to generate invoice PDF' }
+    }
   })
 
   // Send Invoice PDF via Email using SMTP Profile

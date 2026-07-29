@@ -23,12 +23,12 @@ const TABS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'todos', label: 'Todos', icon: ListTodo },
   { id: 'deliverables', label: 'Deliverables', icon: FileText },
-  { id: 'invoices', label: 'Invoices', icon: Receipt },
   { id: 'approvals', label: 'Approvals', icon: CheckSquare },
   { id: 'files', label: 'Files', icon: FolderOpen },
   { id: 'notes', label: 'Notes', icon: StickyNote },
   { id: 'timeline', label: 'Timeline', icon: Clock },
   { id: 'activity', label: 'Activity Log', icon: Activity },
+  { id: 'invoices', label: 'Invoices', icon: Receipt },
   { id: 'settings', label: 'Settings', icon: Settings }
 ]
 

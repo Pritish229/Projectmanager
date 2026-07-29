@@ -42,6 +42,17 @@ function broadcastUpdateStatus(stateUpdate: Partial<UpdateStatusState>): void {
   }
 }
 
+function formatUpdateError(err: any): string {
+  const raw = err?.message || String(err || '')
+  if (raw.includes('Cannot find latest.yml')) {
+    return 'Update manifest (latest.yml) is missing from the GitHub Release. Please re-publish the release using `npm run release` or GitHub Actions.'
+  }
+  if (raw.includes('404')) {
+    return 'Release update file (latest.yml) was not found on GitHub Releases (404 Not Found).'
+  }
+  return raw || 'An error occurred while handling updates.'
+}
+
 export function registerUpdateHandlers(): void {
   // Attach event listeners to electron-updater's autoUpdater
   autoUpdater.on('checking-for-update', () => {
@@ -84,7 +95,7 @@ export function registerUpdateHandlers(): void {
     console.error('[AutoUpdater] Error:', err)
     broadcastUpdateStatus({
       status: 'error',
-      error: err.message || 'An error occurred while handling updates.'
+      error: formatUpdateError(err)
     })
   })
 
@@ -136,11 +147,12 @@ export function registerUpdateHandlers(): void {
       return { success: true, updateInfo: result?.updateInfo }
     } catch (err: any) {
       console.error('[AutoUpdater] Manual check error:', err)
+      const formattedErr = formatUpdateError(err)
       broadcastUpdateStatus({
         status: 'error',
-        error: err.message || 'Failed to check for updates'
+        error: formattedErr
       })
-      return { success: false, error: err.message || 'Failed to check for updates' }
+      return { success: false, error: formattedErr }
     }
   })
 

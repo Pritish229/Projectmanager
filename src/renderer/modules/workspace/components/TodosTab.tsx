@@ -358,7 +358,7 @@ export function TodosTab({ projectId, isReadOnly }: TodosTabProps) {
             </div>
 
             {/* List Body */}
-            <div className={cn("divide-y select-none", isDragging && "bg-muted/10")}>
+            <div className={cn("divide-y select-none pb-20", isDragging && "bg-muted/10")}>
               {filteredTodos.map((todo, idx) => {
                 const isSelected = selectedTodoIds.includes(todo.id)
                 const isCurrentlyDragged = draggedIndex === idx
@@ -464,7 +464,10 @@ export function TodosTab({ projectId, isReadOnly }: TodosTabProps) {
                                 className="fixed inset-0 z-10"
                                 onClick={() => setOpenMenuId(null)}
                               />
-                              <div className="absolute right-0 top-full mt-1 w-36 rounded-lg border bg-popover text-popover-foreground shadow-xl p-1 z-20 animate-scale-in">
+                              <div className={cn(
+                                "absolute right-0 w-36 rounded-lg border bg-popover text-popover-foreground shadow-xl p-1 z-20 animate-scale-in",
+                                (idx > 0 && idx >= filteredTodos.length - 2) ? "bottom-full mb-1" : "top-full mt-1"
+                              )}>
                                 <button
                                   onClick={() => handleOpenEdit(todo)}
                                   className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs text-left hover:bg-muted rounded-md transition-colors"

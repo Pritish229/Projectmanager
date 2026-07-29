@@ -389,7 +389,7 @@ export function DeliverablesTab({ projectId, isReadOnly }: DeliverablesTabProps)
 
             {/* Body */}
             <div className="divide-y">
-              {deliverables.map(del => (
+              {deliverables.map((del, idx) => (
                 <div key={del.id} className="flex items-center px-6 py-4 hover:bg-muted/30 transition-colors">
                   {/* ID */}
                   <div className="w-28 shrink-0 font-mono text-xs text-muted-foreground">
@@ -480,7 +480,10 @@ export function DeliverablesTab({ projectId, isReadOnly }: DeliverablesTabProps)
                         {openMenuId === del.id && (
                           <>
                             <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
-                            <div className="absolute right-0 top-full mt-1 w-44 rounded-lg border bg-popover text-popover-foreground shadow-xl p-1 z-20 animate-scale-in">
+                            <div className={cn(
+                              "absolute right-0 w-44 rounded-lg border bg-popover text-popover-foreground shadow-xl p-1 z-20 animate-scale-in",
+                              (idx > 0 && idx >= deliverables.length - 2) ? "bottom-full mb-1" : "top-full mt-1"
+                            )}>
                               <button
                                 onClick={() => handleOpenEdit(del)}
                                 className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs text-left hover:bg-muted rounded-md transition-colors cursor-pointer"

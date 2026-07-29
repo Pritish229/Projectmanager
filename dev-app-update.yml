@@ -1,5 +1,4 @@
 provider: github
 owner: Pritish229
 repo: Projectmanager
-vPrefixedTagNameFormat: true
 

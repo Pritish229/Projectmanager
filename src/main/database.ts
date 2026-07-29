@@ -108,6 +108,78 @@ export async function initDatabase(): Promise<void> {
     await prisma.$connect()
     console.log('[Database] Connected successfully to:', dbPath)
 
+    // Ensure all tables exist on existing production SQLite databases
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "smtp_profiles" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "name" TEXT NOT NULL UNIQUE,
+        "host" TEXT NOT NULL,
+        "port" INTEGER NOT NULL DEFAULT 587,
+        "secure" BOOLEAN NOT NULL DEFAULT false,
+        "user" TEXT NOT NULL,
+        "pass" TEXT NOT NULL,
+        "from" TEXT NOT NULL DEFAULT '',
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `)
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "invoice_templates" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "name" TEXT NOT NULL,
+        "description" TEXT NOT NULL DEFAULT '',
+        "isDefault" BOOLEAN NOT NULL DEFAULT false,
+        "layoutStyle" TEXT NOT NULL DEFAULT 'modern',
+        "headerTitle" TEXT NOT NULL DEFAULT 'INVOICE',
+        "companyName" TEXT NOT NULL DEFAULT '',
+        "companyAddress" TEXT NOT NULL DEFAULT '',
+        "companyEmail" TEXT NOT NULL DEFAULT '',
+        "companyPhone" TEXT NOT NULL DEFAULT '',
+        "logoUrl" TEXT NOT NULL DEFAULT '',
+        "primaryColor" TEXT NOT NULL DEFAULT '#3b82f6',
+        "termsAndConditions" TEXT NOT NULL DEFAULT 'Payment due within 30 days of invoice date.',
+        "notes" TEXT NOT NULL DEFAULT 'Thank you for your business!',
+        "placeholdersConfig" TEXT NOT NULL DEFAULT '{}',
+        "contentTemplate" TEXT NOT NULL DEFAULT '',
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `)
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "invoices" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "projectId" TEXT NOT NULL,
+        "invoiceNumber" TEXT NOT NULL,
+        "issueDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "dueDate" DATETIME,
+        "status" TEXT NOT NULL DEFAULT 'draft',
+        "currency" TEXT NOT NULL DEFAULT 'USD',
+        "currencySymbol" TEXT NOT NULL DEFAULT '$',
+        "clientName" TEXT NOT NULL DEFAULT '',
+        "clientEmail" TEXT NOT NULL DEFAULT '',
+        "clientAddress" TEXT NOT NULL DEFAULT '',
+        "companyName" TEXT NOT NULL DEFAULT '',
+        "companyAddress" TEXT NOT NULL DEFAULT '',
+        "companyEmail" TEXT NOT NULL DEFAULT '',
+        "subtotal" REAL NOT NULL DEFAULT 0,
+        "discountType" TEXT NOT NULL DEFAULT 'percentage',
+        "discountValue" REAL NOT NULL DEFAULT 0,
+        "discountAmount" REAL NOT NULL DEFAULT 0,
+        "taxType" TEXT NOT NULL DEFAULT 'percentage',
+        "taxValue" REAL NOT NULL DEFAULT 0,
+        "taxAmount" REAL NOT NULL DEFAULT 0,
+        "totalAmount" REAL NOT NULL DEFAULT 0,
+        "termsAndConditions" TEXT NOT NULL DEFAULT '',
+        "notes" TEXT NOT NULL DEFAULT '',
+        "templateId" TEXT,
+        "items" TEXT NOT NULL DEFAULT '[]',
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `)
+
     // Seed default user if none exists
     const userCount = await prisma.user.count()
     if (userCount === 0) {

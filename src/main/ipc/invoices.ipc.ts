@@ -182,11 +182,15 @@ export function registerInvoiceHandlers(): void {
 
   // Seed default templates if database has no templates
   const ensureDefaultTemplates = async () => {
-    const count = await prisma.invoiceTemplate.count()
-    if (count === 0) {
-      for (const tmpl of DEFAULT_TEMPLATES) {
-        await prisma.invoiceTemplate.create({ data: tmpl })
+    try {
+      const count = await prisma.invoiceTemplate.count()
+      if (count === 0) {
+        for (const tmpl of DEFAULT_TEMPLATES) {
+          await prisma.invoiceTemplate.create({ data: tmpl })
+        }
       }
+    } catch (err) {
+      console.error('[Invoice IPC] ensureDefaultTemplates error:', err)
     }
   }
 

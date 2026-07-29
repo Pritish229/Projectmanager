@@ -1,6 +1,6 @@
 {
   "name": "project-workspace-manager",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "A production-ready offline project workspace manager",
   "main": "./out/main/index.js",
   "author": "PWM",
@@ -93,8 +93,7 @@
       {
         "provider": "github",
         "owner": "Pritish229",
-        "repo": "Projectmanager",
-        "vPrefixedTagNameFormat": true
+        "repo": "Projectmanager"
       }
     ],
     "files": [

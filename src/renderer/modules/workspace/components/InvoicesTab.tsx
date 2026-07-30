@@ -9,6 +9,8 @@ import {
   Clock, AlertTriangle, FileText, Send, Sparkles, DollarSign, Eye, RefreshCw, X, ChevronDown
 } from 'lucide-react'
 
+import { InvoicePreviewModal } from './InvoicePreviewModal'
+
 interface Props {
   projectId: string
 }
@@ -58,6 +60,8 @@ export function InvoicesTab({ projectId }: Props) {
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null)
   const [isSendMailOpen, setIsSendMailOpen] = useState(false)
   const [mailInvoice, setMailInvoice] = useState<Invoice | null>(null)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null)
 
   // Confirm delete dialog
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -230,6 +234,11 @@ export function InvoicesTab({ projectId }: Props) {
     setNotes(inv.notes)
 
     setIsEditorOpen(true)
+  }
+
+  const openPreviewModal = (inv: Invoice) => {
+    setViewingInvoice(inv)
+    setIsPreviewOpen(true)
   }
 
   // Line item helpers
@@ -552,11 +561,14 @@ export function InvoicesTab({ projectId }: Props) {
 
               <div>
                 <div className="flex items-start justify-between gap-2 pt-1 mb-2">
-                  <div>
-                    <span className="text-xs font-bold text-muted-foreground font-mono block">
+                  <div
+                    onClick={() => openPreviewModal(inv)}
+                    className="cursor-pointer group/title"
+                  >
+                    <span className="text-xs font-bold text-muted-foreground font-mono block group-hover/title:text-primary transition-colors">
                       #{inv.invoiceNumber}
                     </span>
-                    <h4 className="text-sm font-bold truncate max-w-[180px]">
+                    <h4 className="text-sm font-bold truncate max-w-[180px] group-hover/title:text-primary transition-colors">
                       {inv.clientName || 'Client Recipient'}
                     </h4>
                   </div>
@@ -591,6 +603,14 @@ export function InvoicesTab({ projectId }: Props) {
               {/* Card Footer Actions */}
               <div className="pt-3 border-t flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => openPreviewModal(inv)}
+                    className="p-2 rounded-lg border bg-primary/10 hover:bg-primary/20 text-primary transition-colors flex items-center gap-1"
+                    title="View Invoice"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                  </button>
+
                   <button
                     onClick={() => handleDownloadPdf(inv)}
                     className="p-2 rounded-lg border hover:bg-accent text-foreground transition-colors"
@@ -1114,6 +1134,17 @@ export function InvoicesTab({ projectId }: Props) {
         confirmLabel="Delete"
         variant="danger"
       />
+
+      {/* Invoice Preview Modal */}
+      {viewingInvoice && (
+        <InvoicePreviewModal
+          invoice={viewingInvoice}
+          isOpen={isPreviewOpen}
+          onClose={() => setIsPreviewOpen(false)}
+          onDownloadPdf={(inv) => handleDownloadPdf(inv)}
+          onSendEmail={(inv) => openMailDialog(inv)}
+        />
+      )}
 
     </div>
   )

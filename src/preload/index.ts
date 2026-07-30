@@ -157,7 +157,10 @@ const api = {
     projectStatusChart: () => ipcRenderer.invoke('dashboard:projectStatusChart'),
     todoCompletionChart: () => ipcRenderer.invoke('dashboard:todoCompletionChart'),
     monthlyProjectChart: () => ipcRenderer.invoke('dashboard:monthlyProjectChart'),
-    recentActivity: () => ipcRenderer.invoke('dashboard:recentActivity')
+    recentActivity: () => ipcRenderer.invoke('dashboard:recentActivity'),
+    recentProjects: () => ipcRenderer.invoke('dashboard:recentProjects'),
+    urgentTodos: () => ipcRenderer.invoke('dashboard:urgentTodos'),
+    invoiceStats: () => ipcRenderer.invoke('dashboard:invoiceStats')
   },
 
   // App Update

@@ -101,4 +101,81 @@ export function registerDashboardHandlers(): void {
       take: 10
     })
   })
+
+  // Get recent active projects with client info & todo progress
+  ipcMain.handle('dashboard:recentProjects', async () => {
+    const projects = await prisma.project.findMany({
+      where: { archived: false },
+      orderBy: { updatedAt: 'desc' },
+      take: 6,
+      include: {
+        client: true,
+        todos: { select: { id: true, status: true } }
+      }
+    })
+
+    return projects.map((p) => ({
+      id: p.id,
+      name: p.name,
+      code: p.code,
+      status: p.status,
+      priority: p.priority,
+      clientName: p.client?.name || p.client?.company || null,
+      totalTodos: p.todos.length,
+      completedTodos: p.todos.filter((t) => t.status === 'completed').length,
+      updatedAt: p.updatedAt
+    }))
+  })
+
+  // Get urgent and overdue todos across projects
+  ipcMain.handle('dashboard:urgentTodos', async () => {
+    const todos = await prisma.todo.findMany({
+      where: {
+        status: { notIn: ['completed', 'cancelled'] },
+        OR: [
+          { priority: { in: ['high', 'urgent'] } },
+          { dueDate: { lt: new Date() } }
+        ]
+      },
+      include: {
+        project: { select: { id: true, name: true, code: true } }
+      },
+      orderBy: [
+        { dueDate: 'asc' },
+        { createdAt: 'desc' }
+      ],
+      take: 6
+    })
+    return todos
+  })
+
+  // Get global invoice statistics for dashboard
+  ipcMain.handle('dashboard:invoiceStats', async () => {
+    const invoices = await prisma.invoice.findMany()
+    const totalAmount = invoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0)
+    const paidAmount = invoices.filter((inv) => inv.status === 'paid').reduce((sum, inv) => sum + (inv.totalAmount || 0), 0)
+    const pendingAmount = invoices.filter((inv) => ['draft', 'sent'].includes(inv.status)).reduce((sum, inv) => sum + (inv.totalAmount || 0), 0)
+    const overdueAmount = invoices.filter((inv) => inv.status === 'overdue').reduce((sum, inv) => sum + (inv.totalAmount || 0), 0)
+
+    const statusCounts = {
+      draft: invoices.filter((i) => i.status === 'draft').length,
+      sent: invoices.filter((i) => i.status === 'sent').length,
+      paid: invoices.filter((i) => i.status === 'paid').length,
+      overdue: invoices.filter((i) => i.status === 'overdue').length,
+      cancelled: invoices.filter((i) => i.status === 'cancelled').length
+    }
+
+    const defaultCurrencySymbol = invoices[0]?.currencySymbol || '₹'
+
+    return {
+      totalCount: invoices.length,
+      totalAmount,
+      paidAmount,
+      pendingAmount,
+      overdueAmount,
+      statusCounts,
+      currencySymbol: defaultCurrencySymbol
+    }
+  })
 }
+

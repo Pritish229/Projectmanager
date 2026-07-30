@@ -110,7 +110,14 @@ const api = {
     create: (data: Record<string, unknown>) => ipcRenderer.invoke('notifications:create', data),
     checkDeadlines: () => ipcRenderer.invoke('notifications:checkDeadlines'),
     delete: (id: string) => ipcRenderer.invoke('notifications:delete', id),
-    deleteAll: () => ipcRenderer.invoke('notifications:deleteAll')
+    deleteAll: () => ipcRenderer.invoke('notifications:deleteAll'),
+    onUpdated: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('notifications:updated', listener)
+      return () => {
+        ipcRenderer.removeListener('notifications:updated', listener)
+      }
+    }
   },
 
   // Settings

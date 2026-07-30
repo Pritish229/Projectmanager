@@ -7,6 +7,9 @@ export interface Note {
   content: string
   createdAt: string
   updatedAt: string
+  pinned?: boolean
+  color?: string
+  order?: number
 }
 
 interface NoteState {
@@ -15,9 +18,10 @@ interface NoteState {
   error: string | null
   fetchNotes: (projectId: string) => Promise<void>
   createNote: (data: { projectId: string; title: string; content?: string }) => Promise<Note>
-  updateNoteLocal: (id: string, data: { title?: string; content?: string }) => void
-  updateNote: (id: string, data: { title?: string; content?: string }) => Promise<void>
+  updateNoteLocal: (id: string, data: Partial<Note>) => void
+  updateNote: (id: string, data: Partial<Note>) => Promise<void>
   deleteNote: (id: string) => Promise<void>
+  setNotes: (notes: Note[]) => void
 }
 
 export const useNoteStore = create<NoteState>((set, get) => ({
@@ -49,7 +53,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
 
   updateNoteLocal: (id, data) => {
     set(state => ({
-      notes: state.notes.map(n => n.id === id ? { ...n, ...data, updatedAt: new Date().toISOString() } : n)
+      notes: state.notes.map(n => n.id === id ? { ...n, ...data, updatedAt: data.createdAt ? n.updatedAt : new Date().toISOString() } : n)
     }))
   },
 
@@ -57,7 +61,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
     try {
       // Optimistically update the store state first
       set(state => ({
-        notes: state.notes.map(n => n.id === id ? { ...n, ...data, updatedAt: new Date().toISOString() } : n)
+        notes: state.notes.map(n => n.id === id ? { ...n, ...data, updatedAt: data.createdAt ? n.updatedAt : new Date().toISOString() } : n)
       }))
       // Write to database in the background
       await window.api.notes.update(id, data)
@@ -81,5 +85,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
       set({ error: (err as Error).message, loading: false })
       throw err
     }
-  }
+  },
+
+  setNotes: (notes) => set({ notes })
 }))

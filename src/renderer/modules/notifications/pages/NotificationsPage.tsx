@@ -28,7 +28,8 @@ const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
   overdue: AlertTriangle,
   deadline: Clock,
   approval: CheckCircle2,
-  completion: FolderKanban
+  completion: FolderKanban,
+  update: Sparkles
 }
 
 const NOTIFICATION_COLORS: Record<string, { icon: string; border: string; bg: string; badge: string }> = {
@@ -55,11 +56,17 @@ const NOTIFICATION_COLORS: Record<string, { icon: string; border: string; bg: st
     border: 'border-emerald-500/20 hover:border-emerald-500/40',
     bg: 'bg-emerald-500/10',
     badge: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+  },
+  update: {
+    icon: 'text-indigo-500',
+    border: 'border-indigo-500/20 hover:border-indigo-500/40',
+    bg: 'bg-indigo-500/10',
+    badge: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20'
   }
 }
 
 type TabFilter = 'all' | 'unread' | 'read'
-type TypeFilter = 'all' | 'overdue' | 'deadline' | 'approval' | 'completion'
+type TypeFilter = 'all' | 'overdue' | 'deadline' | 'approval' | 'completion' | 'update'
 
 export function NotificationsPage() {
   const navigate = useNavigate()
@@ -126,7 +133,9 @@ export function NotificationsPage() {
     if (!notif.read) {
       await markRead(notif.id)
     }
-    if (notif.projectId) {
+    if (notif.type === 'update') {
+      navigate('/settings')
+    } else if (notif.projectId) {
       navigate(`/projects/${notif.projectId}?tab=todos`)
     }
   }
@@ -283,6 +292,7 @@ export function NotificationsPage() {
               <option value="deadline">Upcoming Deadlines</option>
               <option value="approval">Approvals</option>
               <option value="completion">Completion</option>
+              <option value="update">App Releases</option>
             </select>
           </div>
 
@@ -410,6 +420,26 @@ export function NotificationsPage() {
 
                 {/* Right section: Action Buttons */}
                 <div className="flex items-center gap-2 self-end sm:self-center shrink-0 pt-2 sm:pt-0">
+                  {notif.type === 'update' && (
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        if (!notif.read) await markRead(notif.id)
+                        if (notif.title.includes('Ready to Install')) {
+                          await window.api.update.restartAndInstall()
+                        } else {
+                          navigate('/settings')
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-primary text-primary-foreground hover:bg-primary/95 transition-all shadow-xs cursor-pointer"
+                      title={notif.title.includes('Ready to Install') ? "Restart and install update" : "Go to Settings and update"}
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{notif.title.includes('Ready to Install') ? 'Restart & Install' : 'View Update'}</span>
+                      <ArrowRight className="w-3 h-3 ml-0.5" />
+                    </button>
+                  )}
+
                   {notif.projectId && (
                     <button
                       onClick={(e) => {

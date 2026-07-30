@@ -53,7 +53,7 @@ export function App() {
 function AppContent() {
   const { applyTheme } = useUIStore()
   const { fetchSettings, settings } = useSettingsStore()
-  const { checkDeadlines } = useNotificationStore()
+  const { checkDeadlines, fetchNotifications, fetchUnreadCount } = useNotificationStore()
   const { isAuthenticated, isPinSet, checkSecurityStatus } = useAuthStore()
   const navigate = useNavigate()
 
@@ -69,11 +69,19 @@ function AppContent() {
       // Check PIN status
       await checkSecurityStatus()
 
-      // Check for overdue items on startup
+      // Check for overdue items on startup & refresh notifications
       await checkDeadlines()
+      await fetchNotifications()
+      await fetchUnreadCount()
     }
 
     init()
+
+    // Listen for real-time notification updates (such as app release updates)
+    const unsubNotifs = window.api.notifications.onUpdated?.(() => {
+      fetchNotifications()
+      fetchUnreadCount()
+    })
 
     // Listen for system theme changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
@@ -86,11 +94,15 @@ function AppContent() {
     mediaQuery.addEventListener('change', handler)
 
     // Periodic deadline check (every 30 min)
-    const interval = setInterval(checkDeadlines, 30 * 60 * 1000)
+    const interval = setInterval(() => {
+      checkDeadlines()
+      fetchUnreadCount()
+    }, 30 * 60 * 1000)
 
     return () => {
       mediaQuery.removeEventListener('change', handler)
       clearInterval(interval)
+      if (unsubNotifs) unsubNotifs()
     }
   }, [])
 

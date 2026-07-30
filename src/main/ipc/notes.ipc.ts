@@ -47,10 +47,15 @@ export function registerNoteHandlers(): void {
   })
 
   // Update note
-  ipcMain.handle('notes:update', async (_, id: string, data: { title?: string; content?: string }) => {
+  ipcMain.handle('notes:update', async (_, id: string, data: { title?: string; content?: string; createdAt?: string }) => {
+    const updateData: { title?: string; content?: string; createdAt?: Date } = {}
+    if (data.title !== undefined) updateData.title = data.title
+    if (data.content !== undefined) updateData.content = data.content
+    if (data.createdAt !== undefined) updateData.createdAt = new Date(data.createdAt)
+
     return prisma.note.update({
       where: { id },
-      data
+      data: updateData
     })
   })
 

@@ -1,5 +1,6 @@
-import { app, ipcMain, BrowserWindow } from 'electron'
+import { app, ipcMain, BrowserWindow, Notification as ElectronNotification } from 'electron'
 import { autoUpdater, UpdateInfo, ProgressInfo } from 'electron-updater'
+import { getPrisma } from '../database'
 
 // Configure autoUpdater settings
 autoUpdater.autoDownload = false
@@ -63,7 +64,7 @@ export function registerUpdateHandlers(): void {
     })
   })
 
-  autoUpdater.on('update-available', (info: UpdateInfo) => {
+  autoUpdater.on('update-available', async (info: UpdateInfo) => {
     console.log('[AutoUpdater] Update available:', info.version)
     let releaseNotesStr = ''
     if (typeof info.releaseNotes === 'string') {
@@ -80,6 +81,45 @@ export function registerUpdateHandlers(): void {
       releaseNotes: releaseNotesStr,
       error: undefined
     })
+
+    // Create in-app and desktop notification for the new release
+    try {
+      const prisma = getPrisma()
+      const existing = await prisma.notification.findFirst({
+        where: {
+          type: 'update',
+          title: { contains: info.version }
+        }
+      })
+
+      if (!existing) {
+        await prisma.notification.create({
+          data: {
+            type: 'update',
+            title: `New App Version v${info.version} Released!`,
+            message: `A new version v${info.version} is now available. ${releaseNotesStr ? `Release Notes: ${releaseNotesStr.slice(0, 180)}` : 'Click to view details and update.'}`
+          }
+        })
+
+        if (ElectronNotification.isSupported()) {
+          const desktopNotif = new ElectronNotification({
+            title: `🚀 PWM Version v${info.version} Released!`,
+            body: `A new app version is available. Click to open and install.`
+          })
+          desktopNotif.show()
+        }
+
+        // Notify renderer windows
+        const windows = BrowserWindow.getAllWindows()
+        for (const win of windows) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('notifications:updated')
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[AutoUpdater] Notification creation error:', err)
+    }
   })
 
   autoUpdater.on('update-not-available', (info: UpdateInfo) => {
@@ -111,7 +151,7 @@ export function registerUpdateHandlers(): void {
     })
   })
 
-  autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+  autoUpdater.on('update-downloaded', async (info: UpdateInfo) => {
     console.log('[AutoUpdater] Update downloaded:', info.version)
     let releaseNotesStr = ''
     if (typeof info.releaseNotes === 'string') {
@@ -128,6 +168,45 @@ export function registerUpdateHandlers(): void {
       releaseNotes: releaseNotesStr,
       progress: 100
     })
+
+    // Create notification for downloaded update ready to install
+    try {
+      const prisma = getPrisma()
+      const existing = await prisma.notification.findFirst({
+        where: {
+          type: 'update',
+          title: { contains: `v${info.version} Ready` }
+        }
+      })
+
+      if (!existing) {
+        await prisma.notification.create({
+          data: {
+            type: 'update',
+            title: `Update v${info.version} Ready to Install`,
+            message: `Version v${info.version} has finished downloading. Click here or go to Settings to restart and apply the new version.`
+          }
+        })
+
+        if (ElectronNotification.isSupported()) {
+          const desktopNotif = new ElectronNotification({
+            title: `🎉 Update v${info.version} Downloaded!`,
+            body: `Restart PWM now to complete the update installation.`
+          })
+          desktopNotif.show()
+        }
+
+        // Notify renderer windows
+        const windows = BrowserWindow.getAllWindows()
+        for (const win of windows) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('notifications:updated')
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[AutoUpdater] Downloaded notification error:', err)
+    }
   })
 
   // IPC Handlers exposed to Renderer

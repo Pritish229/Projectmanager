@@ -501,6 +501,7 @@ export function NotesTab({ projectId, isReadOnly }: NotesTabProps) {
         updatedMeta[noteItem.id] = { ...(updatedMeta[noteItem.id] || {}), order: idx }
       })
       saveMetaMap(updatedMeta)
+      setSortOption('custom')
     }
 
     setDraggedNoteId(null)
@@ -769,7 +770,11 @@ export function NotesTab({ projectId, isReadOnly }: NotesTabProps) {
           <div className="w-80 shrink-0 border-r bg-card flex flex-col h-full">
             <div className="px-4 py-2 border-b shrink-0 flex items-center justify-between text-xs text-muted-foreground bg-muted/20 font-medium">
               <span>{filteredNotes.length} Note{filteredNotes.length !== 1 ? 's' : ''} Listed</span>
-              {sortOption === 'custom' && <span className="text-[10px] text-muted-foreground/70">Drag handle to reorder</span>}
+              {!isReadOnly && (
+                <span className="text-[10px] text-primary/80 font-medium flex items-center gap-1">
+                  <GripVertical className="w-3 h-3 text-primary" /> Drag to reorder
+                </span>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto divide-y select-none">
@@ -781,6 +786,8 @@ export function NotesTab({ projectId, isReadOnly }: NotesTabProps) {
                 filteredNotes.map((note) => {
                   const isActive = note.id === activeNoteId
                   const colorObj = NOTE_COLORS.find(c => c.id === note.color) || NOTE_COLORS[0]
+                  const isDragging = draggedNoteId === note.id
+                  const isDragOver = dragOverNoteId === note.id
 
                   return (
                     <div
@@ -788,20 +795,27 @@ export function NotesTab({ projectId, isReadOnly }: NotesTabProps) {
                       draggable={!isReadOnly}
                       onDragStart={(e) => handleDragStart(e, note.id)}
                       onDragOver={(e) => handleDragOver(e, note.id)}
+                      onDragLeave={() => setDragOverNoteId(null)}
+                      onDragEnd={() => { setDraggedNoteId(null); setDragOverNoteId(null) }}
                       onDrop={(e) => handleDrop(e, note.id)}
                       onClick={() => setActiveNoteId(note.id)}
                       className={cn(
-                        "p-3.5 cursor-pointer hover:bg-muted/40 transition-colors flex flex-col items-start gap-1 relative group border-l-4",
+                        "p-3.5 cursor-pointer hover:bg-muted/50 transition-all flex flex-col items-start gap-1 relative group border-l-4 select-none",
                         colorObj.border,
-                        isActive && "bg-muted/70 shadow-xs",
-                        draggedNoteId === note.id && "opacity-40 scale-95",
-                        dragOverNoteId === note.id && "border-b-2 border-b-primary bg-primary/5"
+                        isActive && "bg-muted/80 shadow-xs",
+                        isDragging && "opacity-40 scale-95 border-dashed border-primary bg-primary/10",
+                        isDragOver && "border-t-2 border-t-primary bg-primary/15 shadow-md ring-1 ring-primary/40"
                       )}
                     >
                       <div className="flex items-center justify-between w-full pr-5">
-                        <div className="flex items-center gap-1.5 overflow-hidden flex-1">
-                          {!isReadOnly && sortOption === 'custom' && (
-                            <GripVertical className="w-3.5 h-3.5 text-muted-foreground/30 group-hover:text-muted-foreground cursor-grab active:cursor-grabbing shrink-0" />
+                        <div className="flex items-center gap-2 overflow-hidden flex-1">
+                          {!isReadOnly && (
+                            <span
+                              title="Drag to reorder note"
+                              className="p-0.5 rounded text-muted-foreground/40 group-hover:text-primary hover:bg-muted cursor-grab active:cursor-grabbing shrink-0 transition-colors"
+                            >
+                              <GripVertical className="w-4 h-4" />
+                            </span>
                           )}
                           <span className="font-semibold text-sm text-foreground truncate flex-1">{note.title || 'Untitled Note'}</span>
                         </div>
@@ -824,11 +838,11 @@ export function NotesTab({ projectId, isReadOnly }: NotesTabProps) {
                         )}
                       </div>
 
-                      <span className="text-xs text-muted-foreground/90 line-clamp-2 w-full leading-relaxed pl-5">
+                      <span className="text-xs text-muted-foreground/90 line-clamp-2 w-full leading-relaxed pl-6">
                         {getNoteSnippet(note.content)}
                       </span>
 
-                      <div className="flex items-center justify-between w-full pl-5 mt-1 text-[10px] text-muted-foreground/70">
+                      <div className="flex items-center justify-between w-full pl-6 mt-1 text-[10px] text-muted-foreground/70">
                         <span className="flex items-center gap-1 font-medium text-muted-foreground">
                           <Calendar className="w-3 h-3 text-primary/80" />
                           Created {formatDate(note.createdAt)}

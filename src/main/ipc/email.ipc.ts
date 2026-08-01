@@ -25,8 +25,8 @@ function formatSmtpError(err: any): string {
   if (msg.includes('535') || msg.includes('BadCredentials') || msg.includes('Username and Password not accepted')) {
     return 'Gmail Authentication Failed (535 5.7.8): Google requires a 16-character "App Password" instead of your standard Gmail account password. Please enable 2-Step Verification on your Google Account and generate an App Password under Security settings.'
   }
-  if (msg.includes('wrong version number') || msg.includes('SSL') || msg.includes('TLS')) {
-    return 'SSL/TLS Mismatch: If using Port 587, uncheck "Use SSL/TLS" (STARTTLS). If using Port 465, check "Use SSL/TLS".'
+  if (msg.includes('wrong version number') || msg.includes('WRONG_VERSION_NUMBER') || msg.includes('SSL') || msg.includes('TLS')) {
+    return 'SSL/TLS Mismatch (WRONG_VERSION_NUMBER): Port 587 requires "Use SSL/TLS" to be UNCHECKED (STARTTLS). Port 465 requires "Use SSL/TLS" to be CHECKED.'
   }
   if (msg.includes('ETIMEDOUT') || msg.includes('ESOCKETTIMEDOUT') || msg.includes('ECONNREFUSED')) {
     return `Connection Failed (${err.code || 'Network Error'}): Could not connect to SMTP server. Please verify your host and port.`
@@ -45,10 +45,14 @@ export function registerEmailHandlers(): void {
   // Test SMTP connection
   ipcMain.handle('email:testConnection', async (_, smtpConfig: SmtpConfig) => {
     try {
+      const port = Number(smtpConfig.port) || 587
+      // Port 465 uses direct SSL (secure: true). Port 587/25 uses STARTTLS (secure: false).
+      const secure = port === 465 ? true : (port === 587 || port === 25 ? false : Boolean(smtpConfig.secure))
+
       const transporter = nodemailer.createTransport({
         host: smtpConfig.host,
-        port: Number(smtpConfig.port) || 587,
-        secure: smtpConfig.secure,
+        port,
+        secure,
         auth: {
           user: smtpConfig.user,
           pass: smtpConfig.pass
@@ -76,10 +80,13 @@ export function registerEmailHandlers(): void {
         return { success: false, error: 'No recipients specified' }
       }
 
+      const port = Number(smtpConfig.port) || 587
+      const secure = port === 465 ? true : (port === 587 || port === 25 ? false : Boolean(smtpConfig.secure))
+
       const transporter = nodemailer.createTransport({
         host: smtpConfig.host,
-        port: smtpConfig.port,
-        secure: smtpConfig.secure,
+        port,
+        secure,
         auth: {
           user: smtpConfig.user,
           pass: smtpConfig.pass

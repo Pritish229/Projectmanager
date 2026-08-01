@@ -920,10 +920,13 @@ export function registerInvoiceHandlers(): void {
 
       const pdfBytes = await generateInvoicePdfBuffer(invoice)
 
+      const port = Number(smtpConfig.port) || 587
+      const secure = port === 465 ? true : (port === 587 || port === 25 ? false : Boolean(smtpConfig.secure))
+
       const transporter = nodemailer.createTransport({
         host: smtpConfig.host,
-        port: smtpConfig.port,
-        secure: smtpConfig.secure,
+        port,
+        secure,
         auth: {
           user: smtpConfig.user,
           pass: smtpConfig.pass

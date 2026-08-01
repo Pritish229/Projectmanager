@@ -1127,7 +1127,14 @@ export function SettingsPage() {
                       <input
                         type="checkbox"
                         checked={formProfile.secure}
-                        onChange={e => setFormProfile({ ...formProfile, secure: e.target.checked })}
+                        onChange={e => {
+                          const checked = e.target.checked
+                          setFormProfile({
+                            ...formProfile,
+                            secure: checked,
+                            port: checked ? 465 : 587
+                          })
+                        }}
                         className="rounded accent-indigo-500"
                       />
                       <span className="text-xs text-muted-foreground font-medium">Use SSL/TLS (port 465)</span>

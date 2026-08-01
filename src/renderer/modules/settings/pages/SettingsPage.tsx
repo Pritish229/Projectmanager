@@ -1155,16 +1155,46 @@ export function SettingsPage() {
                   </div>
 
                   {testResult && (
-                    <div className={cn(
-                      'p-3 rounded-lg border text-xs flex items-center gap-2',
-                      testResult.success
-                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
-                        : 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400'
-                    )}>
-                      {testResult.success ? (
-                        <><CheckCircle2 className="w-4 h-4 shrink-0" /> SMTP connection verified successfully!</>
-                      ) : (
-                        <><AlertTriangle className="w-4 h-4 shrink-0" /> Connection failed: {testResult.error}</>
+                    <div className="space-y-2">
+                      <div className={cn(
+                        'p-3 rounded-lg border text-xs flex items-start gap-2',
+                        testResult.success
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400'
+                      )}>
+                        {testResult.success ? (
+                          <><CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" /> <span>SMTP connection verified successfully!</span></>
+                        ) : (
+                          <><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" /> <span>Connection failed: {testResult.error}</span></>
+                        )}
+                      </div>
+
+                      {!testResult.success && (testResult.error?.includes('Gmail') || testResult.error?.includes('535') || testResult.error?.includes('App Password') || testResult.error?.includes('BadCredentials')) && (
+                        <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-xs space-y-2 text-foreground">
+                          <p className="font-semibold text-indigo-400">💡 How to fix Gmail Connection (535 Bad Credentials):</p>
+                          <p className="text-muted-foreground leading-relaxed">
+                            Google requires a 16-character <strong>App Password</strong> for SMTP. Your normal Google account password will not work.
+                          </p>
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => window.api.shell.openExternal('https://myaccount.google.com/apppasswords')}
+                              className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-medium cursor-pointer transition-colors inline-flex items-center gap-1.5"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> Generate Google App Password
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowGuide(true)
+                                setActiveGuideTab('gmail')
+                              }}
+                              className="px-3 py-1 bg-muted hover:bg-muted/80 text-foreground border rounded text-xs font-medium cursor-pointer transition-colors"
+                            >
+                              📖 View Step-by-Step Gmail Guide
+                            </button>
+                          </div>
+                        </div>
                       )}
                     </div>
                   )}

@@ -20,6 +20,20 @@ interface SendEmailOptions {
   smtpConfig: SmtpConfig
 }
 
+function formatSmtpError(err: any): string {
+  const msg = err?.message || String(err)
+  if (msg.includes('535') || msg.includes('BadCredentials') || msg.includes('Username and Password not accepted')) {
+    return 'Gmail Authentication Failed (535 5.7.8): Google requires a 16-character "App Password" instead of your standard Gmail account password. Please enable 2-Step Verification on your Google Account and generate an App Password under Security settings.'
+  }
+  if (msg.includes('wrong version number') || msg.includes('SSL') || msg.includes('TLS')) {
+    return 'SSL/TLS Mismatch: If using Port 587, uncheck "Use SSL/TLS" (STARTTLS). If using Port 465, check "Use SSL/TLS".'
+  }
+  if (msg.includes('ETIMEDOUT') || msg.includes('ESOCKETTIMEDOUT') || msg.includes('ECONNREFUSED')) {
+    return `Connection Failed (${err.code || 'Network Error'}): Could not connect to SMTP server. Please verify your host and port.`
+  }
+  return msg
+}
+
 export function registerEmailHandlers(): void {
   const prisma = getPrisma()
 
@@ -33,7 +47,7 @@ export function registerEmailHandlers(): void {
     try {
       const transporter = nodemailer.createTransport({
         host: smtpConfig.host,
-        port: smtpConfig.port,
+        port: Number(smtpConfig.port) || 587,
         secure: smtpConfig.secure,
         auth: {
           user: smtpConfig.user,
@@ -44,7 +58,7 @@ export function registerEmailHandlers(): void {
       await transporter.verify()
       return { success: true }
     } catch (err: any) {
-      return { success: false, error: err.message }
+      return { success: false, error: formatSmtpError(err) }
     }
   })
 
@@ -99,7 +113,7 @@ export function registerEmailHandlers(): void {
       return { success: true }
     } catch (err: any) {
       console.error('[Email] Send failed:', err)
-      return { success: false, error: err.message }
+      return { success: false, error: formatSmtpError(err) }
     }
   })
 

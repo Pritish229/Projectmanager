@@ -974,7 +974,11 @@ export function registerInvoiceHandlers(): void {
 
       return { success: true }
     } catch (err: any) {
-      return { success: false, error: err.message || 'Failed to send email' }
+      let errorMsg = err.message || 'Failed to send email'
+      if (errorMsg.includes('535') || errorMsg.includes('BadCredentials') || errorMsg.includes('Username and Password not accepted')) {
+        errorMsg = 'Gmail Authentication Failed (535 5.7.8): Google requires a 16-character "App Password" instead of your normal Gmail account password. Enable 2-Step Verification on your Google account and generate an App Password in Security settings.'
+      }
+      return { success: false, error: errorMsg }
     }
   })
 }

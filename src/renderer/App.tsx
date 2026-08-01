@@ -207,6 +207,7 @@ function AppContent() {
             <Route path="/" element={<DashboardPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/projects/:id" element={<WorkspacePage />} />
+            <Route path="/workspace/:id" element={<WorkspacePage />} />
             <Route path="/clients" element={<ClientsPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />

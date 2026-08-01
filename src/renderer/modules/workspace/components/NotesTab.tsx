@@ -340,7 +340,7 @@ export function NotesTab({ projectId, isReadOnly }: NotesTabProps) {
       const bracketIdx = textBefore.lastIndexOf('[')
       if (bracketIdx !== -1) {
         const afterBracket = textBefore.slice(bracketIdx + 1)
-        if (!afterBracket.includes(']') && !afterBracket.includes('[')) {
+        if (!afterBracket.includes(']') && !afterBracket.includes('[') && !afterBracket.includes('\n')) {
           const domSelection = window.getSelection()
           if (domSelection && domSelection.rangeCount > 0) {
             const range = domSelection.getRangeAt(0)
@@ -384,15 +384,26 @@ export function NotesTab({ projectId, isReadOnly }: NotesTabProps) {
 
   // Keyboard navigation for autocomplete popup
   useEffect(() => {
-    if (!autocomplete.visible) return
+    if (!autocomplete.visible || filteredMatches.length === 0) return
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown') { e.preventDefault(); setAutocomplete(prev => ({ ...prev, selectedIndex: Math.min(prev.selectedIndex + 1, filteredMatches.length - 1) })) }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); setAutocomplete(prev => ({ ...prev, selectedIndex: Math.max(prev.selectedIndex - 1, 0) })) }
-      else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); const item = filteredMatches[autocomplete.selectedIndex]; if (item) insertRef.current(item) }
-      else if (e.key === 'Escape') { closeAutocomplete() }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setAutocomplete(prev => ({ ...prev, selectedIndex: Math.min(prev.selectedIndex + 1, filteredMatches.length - 1) }))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setAutocomplete(prev => ({ ...prev, selectedIndex: Math.max(prev.selectedIndex - 1, 0) }))
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        const item = filteredMatches[autocomplete.selectedIndex]
+        if (item) {
+          e.preventDefault()
+          insertRef.current(item)
+        }
+      } else if (e.key === 'Escape') {
+        closeAutocomplete()
+      }
     }
     window.addEventListener('keydown', onKeyDown, true)
-    return () => window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [autocomplete.visible, autocomplete.selectedIndex, filteredMatches, closeAutocomplete])
 
   // Sync active note content into editor

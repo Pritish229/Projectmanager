@@ -447,7 +447,7 @@ export function DashboardPage() {
               return (
                 <div
                   key={project.id}
-                  onClick={() => navigate(`/workspace/${project.id}`)}
+                  onClick={() => navigate(`/projects/${project.id}`)}
                   className="border rounded-xl p-4 bg-muted/10 hover:bg-muted/30 hover:border-primary/50 transition-all cursor-pointer space-y-3 group"
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -528,11 +528,15 @@ export function DashboardPage() {
                 return (
                   <div
                     key={todo.id}
-                    className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors"
+                    onClick={() => navigate(`/projects/${todo.projectId}?tab=todos`)}
+                    className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer"
                   >
                     <div className="flex items-start gap-2.5 min-w-0">
                       <button
-                        onClick={() => handleCompleteTodo(todo.id)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleCompleteTodo(todo.id)
+                        }}
                         className="mt-0.5 text-muted-foreground hover:text-emerald-500 transition-colors cursor-pointer"
                         title="Mark Complete"
                       >
@@ -591,7 +595,14 @@ export function DashboardPage() {
           ) : (
             <div className="space-y-3">
               {activities.slice(0, 6).map((log) => (
-                <div key={log.id} className="flex items-start gap-3 text-xs border-b pb-2.5 last:border-none">
+                <div
+                  key={log.id}
+                  onClick={() => log.projectId && navigate(`/projects/${log.projectId}`)}
+                  className={cn(
+                    "flex items-start gap-3 text-xs border-b pb-2.5 last:border-none",
+                    log.projectId ? "cursor-pointer hover:bg-muted/30 p-1.5 rounded-lg transition-colors" : ""
+                  )}
+                >
                   <div className="w-7 h-7 rounded-full bg-violet-500/10 text-violet-500 flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">
                     <Activity className="w-3.5 h-3.5" />
                   </div>

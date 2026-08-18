@@ -55,7 +55,8 @@ import {
   RadialBarChart,
   RadialBar
 } from 'recharts'
-import { cn, formatDate } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { getEmailProviderInfo } from '@/lib/emailProviderHelper'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ReportTab = 'summary' | 'projects' | 'todos' | 'deliverables' | 'approvals'
@@ -84,6 +85,7 @@ interface EmailDialogState {
   // Multi-recipient
   recipients: string[]
   recipientInput: string
+  ccInput?: string
   subject: string
   body: string
   smtpConfig: SmtpConfig
@@ -374,6 +376,19 @@ function EmailDialog({ state, onChange, onSend, onTest, onClose, onLoadProfiles,
             </div>
 
             <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                CC <span className="normal-case font-normal">(optional, comma-separated)</span>
+              </label>
+              <input
+                type="text"
+                value={state.ccInput || ''}
+                onChange={e => onChange({ ccInput: e.target.value })}
+                placeholder="cc1@example.com, cc2@example.com"
+                className="w-full px-3 py-2 rounded-lg border bg-background text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
+              />
+            </div>
+
+            <div>
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Subject</label>
               <input
                 type="text"
@@ -498,11 +513,14 @@ function EmailDialog({ state, onChange, onSend, onTest, onClose, onLoadProfiles,
                 className="w-full px-3 py-2 rounded-lg border bg-background text-sm font-semibold outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer shadow-sm"
               >
                 <option value="">Custom SMTP Credentials (No Profile)</option>
-                {state.profiles.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.user})
-                  </option>
-                ))}
+                {state.profiles.map(p => {
+                  const provider = getEmailProviderInfo(p.host, p.user, p.name)
+                  return (
+                    <option key={p.id} value={p.id}>
+                      [{provider.name}] {p.name} ({p.user})
+                    </option>
+                  )
+                })}
               </select>
               {state.activeProfileId && (
                 <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
@@ -1448,6 +1466,7 @@ export function ReportsPage() {
     try {
       const result: any = await window.api.email.sendWithPdf({
         to: emailState.recipients,
+        cc: emailState.ccInput || '',
         subject: emailState.subject,
         body: emailState.body,
         pdfBase64: emailState.pdfBase64,

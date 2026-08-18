@@ -13,6 +13,7 @@ interface SmtpConfig {
 
 interface SendEmailOptions {
   to: string | string[]
+  cc?: string | string[]
   subject: string
   body: string
   pdfBase64: string
@@ -66,10 +67,10 @@ export function registerEmailHandlers(): void {
     }
   })
 
-  // Send email with PDF attachment (supports multiple recipients)
+  // Send email with PDF attachment (supports multiple recipients & CC)
   ipcMain.handle('email:sendWithPdf', async (_, options: SendEmailOptions) => {
     try {
-      const { to, subject, body, pdfBase64, pdfFilename, smtpConfig } = options
+      const { to, cc, subject, body, pdfBase64, pdfFilename, smtpConfig } = options
 
       // Normalise recipients to array
       const recipients: string[] = Array.isArray(to)
@@ -79,6 +80,10 @@ export function registerEmailHandlers(): void {
       if (recipients.length === 0) {
         return { success: false, error: 'No recipients specified' }
       }
+
+      const ccRecipients: string[] = cc
+        ? (Array.isArray(cc) ? cc.filter(Boolean) : cc.split(/[,;]/).map(s => s.trim()).filter(Boolean))
+        : []
 
       const port = Number(smtpConfig.port) || 587
       const secure = port === 465 ? true : (port === 587 || port === 25 ? false : Boolean(smtpConfig.secure))
@@ -99,6 +104,7 @@ export function registerEmailHandlers(): void {
       await transporter.sendMail({
         from: smtpConfig.from || smtpConfig.user,
         to: recipients.join(', '),
+        ...(ccRecipients.length > 0 ? { cc: ccRecipients.join(', ') } : {}),
         subject,
         html: `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937;">
           ${body.replace(/\n/g, '<br>')}
@@ -217,6 +223,231 @@ export function registerEmailHandlers(): void {
       return { success: true, pass: profile?.pass || '' }
     } catch (err: any) {
       return { success: false, error: err.message }
+    }
+  })
+
+  // ─── EMAIL TEMPLATES IPC HANDLERS ──────────────────────────────────────────────
+
+  const DEFAULT_EMAIL_TEMPLATES = [
+    {
+      id: 'tpl-1',
+      name: 'Professional Invoice Notification',
+      category: 'Billing / Invoice',
+      subject: 'Invoice {{invoice_number}} from {{company_name}}',
+      body: 'Hello {{client_name}},\n\nPlease find attached invoice {{invoice_number}} for your review.\n\nTotal Amount: {{amount}}\nDue Date: {{due_date}}\n\nPlease let us know if you have any questions.\n\nBest regards,\n{{company_name}}',
+      isPrebuilt: true
+    },
+    {
+      id: 'tpl-2',
+      name: 'Friendly Payment Reminder',
+      category: 'Payment Reminder',
+      subject: 'Friendly Reminder: Invoice {{invoice_number}} Due Soon',
+      body: 'Dear {{client_name}},\n\nThis is a gentle reminder that payment for invoice {{invoice_number}} ({{amount}}) is due on {{due_date}}.\n\nIf you have already sent payment, please disregard this notice.\n\nThank you for your business!\n{{company_name}}',
+      isPrebuilt: true
+    },
+    {
+      id: 'tpl-3',
+      name: 'Urgent Overdue Notice',
+      category: 'Overdue Notice',
+      subject: 'URGENT: Invoice {{invoice_number}} is Past Due',
+      body: 'Dear {{client_name}},\n\nOur records show that invoice {{invoice_number}} for {{amount}}, which was due on {{due_date}}, remains unpaid.\n\nPlease arrange for payment as soon as possible to avoid any service disruptions.\n\nThank you,\n{{company_name}}',
+      isPrebuilt: true
+    },
+    {
+      id: 'tpl-4',
+      name: 'Payment Confirmation & Thank You',
+      category: 'Payment Receipt',
+      subject: 'Payment Received - Thank You! (Invoice {{invoice_number}})',
+      body: 'Dear {{client_name}},\n\nWe have received your payment for invoice {{invoice_number}} ({{amount}}). Thank you very much!\n\nWe appreciate working with you.\n\nBest regards,\n{{company_name}}',
+      isPrebuilt: true
+    },
+    {
+      id: 'tpl-5',
+      name: 'Project Proposal & Scope Delivery',
+      category: 'Proposal / Quote',
+      subject: 'Project Proposal & Scope for {{project_name}}',
+      body: 'Hello {{client_name}},\n\nThank you for considering {{company_name}} for your project.\n\nPlease find attached our detailed proposal and estimated scope for {{project_name}}.\n\nWe look forward to collaborating with you!\n\nWarm regards,\n{{company_name}}',
+      isPrebuilt: true
+    },
+    {
+      id: 'tpl-6',
+      name: 'Weekly Project Progress Update',
+      category: 'Progress Update',
+      subject: 'Weekly Progress Update: {{project_name}}',
+      body: 'Hello {{client_name}},\n\nHere is our weekly update on {{project_name}}.\n\nWe have made great progress on key deliverables this week and remain on schedule.\n\nPlease review the attached summary report.\n\nBest,\n{{company_name}}',
+      isPrebuilt: true
+    },
+    {
+      id: 'tpl-7',
+      name: 'Milestone Completion Notice',
+      category: 'Milestone',
+      subject: 'Milestone Completed for {{project_name}}',
+      body: 'Dear {{client_name}},\n\nWe are pleased to inform you that we have successfully completed the latest milestone for {{project_name}}.\n\nPlease review the details in the attached document.\n\nThank you,\n{{company_name}}',
+      isPrebuilt: true
+    },
+    {
+      id: 'tpl-8',
+      name: 'Final Deliverables Handover',
+      category: 'Deliverables',
+      subject: 'Final Deliverables Handover: {{project_name}}',
+      body: 'Dear {{client_name}},\n\nWe are excited to share that all deliverables for {{project_name}} have been completed and finalized.\n\nAttached is the final report and asset checklist for your records.\n\nThank you for choosing {{company_name}}!\n\nBest regards,\n{{company_name}}',
+      isPrebuilt: true
+    },
+    {
+      id: 'tpl-9',
+      name: 'Formal Business Cover Letter',
+      category: 'Formal Correspondence',
+      subject: 'Formal Notice Regarding {{project_name}}',
+      body: 'To {{client_name}},\n\nPlease accept the attached documentation regarding {{project_name}}.\n\nShould you require further information or formal verification, please feel free to reach out directly.\n\nSincerely,\n{{company_name}}',
+      isPrebuilt: true
+    },
+    {
+      id: 'tpl-10',
+      name: 'Client Onboarding & Welcome',
+      category: 'Onboarding',
+      subject: 'Welcome to {{company_name}} - Project Kickoff for {{project_name}}',
+      body: 'Dear {{client_name}},\n\nWelcome to {{company_name}}! We are thrilled to start working on {{project_name}} with you.\n\nPlease find attached our onboarding overview and next steps.\n\nWarm regards,\n{{company_name}}',
+      isPrebuilt: true
+    }
+  ]
+
+  // Get all email templates (merges prebuilts & custom templates)
+  ipcMain.handle('email:getTemplates', async () => {
+    try {
+      const setting = await prisma.setting.findUnique({ where: { key: 'email_templates' } })
+      let templates = setting?.value ? JSON.parse(setting.value) : []
+      if (!templates || templates.length === 0) {
+        templates = DEFAULT_EMAIL_TEMPLATES
+        await prisma.setting.upsert({
+          where: { key: 'email_templates' },
+          update: { value: JSON.stringify(templates) },
+          create: { key: 'email_templates', value: JSON.stringify(templates) }
+        })
+      }
+      return templates
+    } catch (err: any) {
+      console.error('[Email] Failed to load templates:', err)
+      return DEFAULT_EMAIL_TEMPLATES
+    }
+  })
+
+  // Save email template (create or update)
+  ipcMain.handle('email:saveTemplate', async (_, template: any) => {
+    try {
+      const setting = await prisma.setting.findUnique({ where: { key: 'email_templates' } })
+      let templates: any[] = setting?.value ? JSON.parse(setting.value) : [...DEFAULT_EMAIL_TEMPLATES]
+      if (template.id) {
+        const index = templates.findIndex(t => t.id === template.id)
+        if (index >= 0) {
+          templates[index] = { ...templates[index], ...template }
+        } else {
+          templates.push(template)
+        }
+      } else {
+        const newTpl = {
+          ...template,
+          id: `custom-${Date.now()}`,
+          isPrebuilt: false
+        }
+        templates.push(newTpl)
+      }
+      await prisma.setting.upsert({
+        where: { key: 'email_templates' },
+        update: { value: JSON.stringify(templates) },
+        create: { key: 'email_templates', value: JSON.stringify(templates) }
+      })
+      return { success: true, templates }
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  // Delete an email template
+  ipcMain.handle('email:deleteTemplate', async (_, id: string) => {
+    try {
+      const setting = await prisma.setting.findUnique({ where: { key: 'email_templates' } })
+      let templates: any[] = setting?.value ? JSON.parse(setting.value) : [...DEFAULT_EMAIL_TEMPLATES]
+      templates = templates.filter(t => t.id !== id)
+      await prisma.setting.upsert({
+        where: { key: 'email_templates' },
+        update: { value: JSON.stringify(templates) },
+        create: { key: 'email_templates', value: JSON.stringify(templates) }
+      })
+      return { success: true, templates }
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  // Reset to default 10 prebuilt templates
+  ipcMain.handle('email:resetDefaultTemplates', async () => {
+    try {
+      await prisma.setting.upsert({
+        where: { key: 'email_templates' },
+        update: { value: JSON.stringify(DEFAULT_EMAIL_TEMPLATES) },
+        create: { key: 'email_templates', value: JSON.stringify(DEFAULT_EMAIL_TEMPLATES) }
+      })
+      return { success: true, templates: DEFAULT_EMAIL_TEMPLATES }
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  // Get SMTP Profile -> Template Mappings (which email account uses what template)
+  ipcMain.handle('email:getProfileTemplateMappings', async () => {
+    try {
+      const setting = await prisma.setting.findUnique({ where: { key: 'email_profile_template_mappings' } })
+      return setting?.value ? JSON.parse(setting.value) : {}
+    } catch (err) {
+      return {}
+    }
+  })
+
+  // Set SMTP Profile -> Template Mapping
+  ipcMain.handle('email:setProfileTemplateMapping', async (_, { profileId, templateId }: { profileId: string; templateId: string }) => {
+    try {
+      const setting = await prisma.setting.findUnique({ where: { key: 'email_profile_template_mappings' } })
+      const mappings: Record<string, string> = setting?.value ? JSON.parse(setting.value) : {}
+      if (templateId) {
+        mappings[profileId] = templateId
+      } else {
+        delete mappings[profileId]
+      }
+      await prisma.setting.upsert({
+        where: { key: 'email_profile_template_mappings' },
+        update: { value: JSON.stringify(mappings) },
+        create: { key: 'email_profile_template_mappings', value: JSON.stringify(mappings) }
+      })
+      return { success: true, mappings }
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  // Store profile connection status result
+  ipcMain.handle('email:setProfileStatus', async (_, { profileId, isConnected, lastError }: { profileId: string; isConnected: boolean; lastError?: string }) => {
+    try {
+      const setting = await prisma.setting.findUnique({ where: { key: 'email_profile_statuses' } })
+      const statuses: Record<string, { isConnected: boolean; lastError?: string; checkedAt: string }> = setting?.value ? JSON.parse(setting.value) : {}
+      statuses[profileId] = { isConnected, lastError, checkedAt: new Date().toISOString() }
+      await prisma.setting.upsert({
+        where: { key: 'email_profile_statuses' },
+        update: { value: JSON.stringify(statuses) },
+        create: { key: 'email_profile_statuses', value: JSON.stringify(statuses) }
+      })
+      return { success: true, statuses }
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  // Get profile connection statuses
+  ipcMain.handle('email:getProfileStatuses', async () => {
+    try {
+      const setting = await prisma.setting.findUnique({ where: { key: 'email_profile_statuses' } })
+      return setting?.value ? JSON.parse(setting.value) : {}
+    } catch (err) {
+      return {}
     }
   })
 }

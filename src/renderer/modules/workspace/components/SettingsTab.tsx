@@ -8,6 +8,8 @@ import { useClientStore } from '@/stores/useClientStore'
 import { PROJECT_STATUSES, PROJECT_PRIORITIES } from '@/lib/constants'
 import { DatePicker, ConfirmDialog } from '@/components/shared'
 import { cn } from '@/lib/utils'
+import { useEmailTemplateStore } from '@/stores/useEmailTemplateStore'
+import { getEmailProviderInfo } from '@/lib/emailProviderHelper'
 import {
   Save,
   Trash2,
@@ -63,6 +65,7 @@ export function SettingsTab({ project }: SettingsTabProps) {
   const [showClientDropdown, setShowClientDropdown] = useState(false)
 
   // Email profile state
+  const { profileStatuses, fetchStatuses } = useEmailTemplateStore()
   const [smtpProfiles, setSmtpProfiles] = useState<any[]>([])
   const [projectSmtpProfileId, setProjectSmtpProfileId] = useState<string>('')
 
@@ -91,6 +94,7 @@ export function SettingsTab({ project }: SettingsTabProps) {
   // Load clients and email profiles on mount
   useEffect(() => {
     fetchClients()
+    fetchStatuses()
     window.api.email.getProfiles().then(setSmtpProfiles).catch(() => {})
     window.api.settings.get(`project_${project.id}_default_smtp_profile_id`).then(val => {
       if (val) setProjectSmtpProfileId(val)
@@ -439,11 +443,17 @@ export function SettingsTab({ project }: SettingsTabProps) {
                   className="w-full px-3 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <option value="">Use App Global Default Profile</option>
-                  {smtpProfiles.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.user})
-                    </option>
-                  ))}
+                  {smtpProfiles.map((p) => {
+                    const provider = getEmailProviderInfo(p.host, p.user, p.name)
+                    const status = profileStatuses[p.id]
+                    const statusDot = status?.isConnected ? '🟢' : (status ? '🔴' : '🟠')
+                    const statusText = status?.isConnected ? 'Connected' : (status ? 'Error' : 'Not Verified')
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {statusDot} [{provider.name}] {p.name} ({p.user}) - {statusText}
+                      </option>
+                    )
+                  })}
                 </select>
                 <p className="text-[11px] text-muted-foreground mt-1">
                   When sending report PDFs via email for this project, this SMTP profile will be auto-selected by default.

@@ -870,7 +870,7 @@ export function registerInvoiceHandlers(): void {
   })
 
   // Send Invoice PDF via Email using SMTP Profile
-  ipcMain.handle('invoices:sendEmail', async (_, { invoiceId, smtpProfileId, recipientEmail, subject, bodyMessage }: any) => {
+  ipcMain.handle('invoices:sendEmail', async (_, { invoiceId, smtpProfileId, recipientEmail, cc, subject, bodyMessage }: any) => {
     try {
       const invoice = await prisma.invoice.findUnique({
         where: { id: invoiceId },
@@ -937,9 +937,12 @@ export function registerInvoiceHandlers(): void {
       const mailSubject = subject || `Invoice ${invoice.invoiceNumber} from ${invoice.companyName || 'our company'}`
       const mailBody = bodyMessage || `Hello ${invoice.clientName || 'Valued Client'},\n\nPlease find attached invoice ${invoice.invoiceNumber} for your review.\n\nTotal Amount: ${invoice.currencySymbol}${invoice.totalAmount.toFixed(2)}\nDue Date: ${invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'Upon Receipt'}\n\nThank you for your business!`
 
+      const ccValue = cc ? (Array.isArray(cc) ? cc.join(', ') : String(cc).trim()) : undefined
+
       await transporter.sendMail({
         from: smtpConfig.from || smtpConfig.user,
         to: targetEmail,
+        ...(ccValue ? { cc: ccValue } : {}),
         subject: mailSubject,
         html: `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px;">
           <h2 style="color: ${invoice.template?.primaryColor || '#3b82f6'}; font-size: 20px; margin-bottom: 12px;">

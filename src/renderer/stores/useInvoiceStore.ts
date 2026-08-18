@@ -82,7 +82,7 @@ interface InvoiceState {
   deleteInvoice: (id: string) => Promise<boolean>
   updateInvoiceStatus: (id: string, status: string) => Promise<void>
   generatePdf: (id: string) => Promise<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }>
-  sendEmail: (options: { invoiceId: string; smtpProfileId?: string; recipientEmail?: string; subject?: string; bodyMessage?: string }) => Promise<{ success: boolean; error?: string }>
+  sendEmail: (options: { invoiceId: string; smtpProfileId?: string; recipientEmail?: string; cc?: string; subject?: string; bodyMessage?: string }) => Promise<{ success: boolean; error?: string }>
 }
 
 export const useInvoiceStore = create<InvoiceState>((set, get) => ({

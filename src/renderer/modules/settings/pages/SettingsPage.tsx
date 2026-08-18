@@ -43,6 +43,9 @@ import {
 } from 'lucide-react'
 import { useInvoiceStore } from '@/stores/useInvoiceStore'
 import { InvoiceTemplateEditorModal } from '../components/InvoiceTemplateEditorModal'
+import { useEmailTemplateStore, EmailTemplate } from '@/stores/useEmailTemplateStore'
+import { EmailTemplateEditorModal } from '../components/EmailTemplateEditorModal'
+import { getEmailProviderInfo } from '@/lib/emailProviderHelper'
 
 type SettingsTab = 'profile' | 'invoices' | 'email' | 'appearance' | 'backup' | 'storage' | 'security' | 'updates'
 
@@ -243,7 +246,25 @@ export function SettingsPage() {
     from: ''
   })
 
-  // Load profiles on mount
+  // ─── Email Templates & Profile Status Store ────────────────────────────────
+  const {
+    templates: emailTemplates,
+    fetchTemplates: fetchEmailTemplates,
+    deleteTemplate: deleteEmailTemplate,
+    resetDefaultTemplates,
+    profileMappings,
+    fetchMappings,
+    setMapping,
+    profileStatuses,
+    fetchStatuses,
+    setStatus
+  } = useEmailTemplateStore()
+
+  const [emailTemplateModalOpen, setEmailTemplateModalOpen] = useState(false)
+  const [editingEmailTemplate, setEditingEmailTemplate] = useState<EmailTemplate | null>(null)
+  const [testingProfileId, setTestingProfileId] = useState<string | null>(null)
+
+  // Load profiles and email templates on mount
   const loadSmtpProfiles = async () => {
     setLoadingProfiles(true)
     try {
@@ -259,7 +280,39 @@ export function SettingsPage() {
   useEffect(() => {
     loadSmtpProfiles()
     loadProfileInfo()
+    fetchEmailTemplates()
+    fetchMappings()
+    fetchStatuses()
   }, [])
+
+  const handleTestCardConnection = async (profile: SmtpProfile) => {
+    if (!profile.id) return
+    setTestingProfileId(profile.id)
+    try {
+      const passRes = await window.api.email.getProfilePass(profile.id)
+      const pass = passRes?.pass || ''
+      const res = await window.api.email.testConnection({
+        host: profile.host,
+        port: profile.port,
+        secure: profile.secure,
+        user: profile.user,
+        pass,
+        from: profile.from
+      })
+      if (res.success) {
+        await setStatus(profile.id, true)
+        toast.success(`Connection to "${profile.name}" verified!`)
+      } else {
+        await setStatus(profile.id, false, res.error)
+        toast.error(`Connection failed for "${profile.name}": ${res.error || 'Bad credentials'}`)
+      }
+    } catch (err: any) {
+      await setStatus(profile.id, false, err.message)
+      toast.error(`Failed to test connection for "${profile.name}"`)
+    } finally {
+      setTestingProfileId(null)
+    }
+  }
 
   const handleOpenAddForm = () => {
     setEditingProfileId(null)
@@ -917,6 +970,11 @@ export function SettingsPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {smtpProfiles.map(prof => {
                       const isDefault = settings.default_smtp_profile_id === prof.id
+                      const providerInfo = getEmailProviderInfo(prof.host, prof.user, prof.name)
+                      const statusInfo = prof.id ? profileStatuses[prof.id] : undefined
+                      const isTesting = prof.id === testingProfileId
+                      const assignedTemplateId = prof.id ? (profileMappings[prof.id] || '') : ''
+
                       return (
                         <div
                           key={prof.id}
@@ -926,7 +984,7 @@ export function SettingsPage() {
                           )}
                         >
                           <div>
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
                               <span className="font-semibold text-sm text-foreground flex items-center gap-2">
                                 <Server className="w-4 h-4 text-indigo-500 shrink-0" />
                                 {prof.name}
@@ -936,22 +994,73 @@ export function SettingsPage() {
                                   </span>
                                 )}
                               </span>
-                              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground uppercase">
-                                Port {prof.port}
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                {/* Provider Type Badge */}
+                                <span className={cn(
+                                  'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider',
+                                  providerInfo.bgColor,
+                                  providerInfo.color,
+                                  providerInfo.borderColor
+                                )}>
+                                  <span className={cn('w-1.5 h-1.5 rounded-full', providerInfo.dotColor)} />
+                                  {providerInfo.name}
+                                </span>
+                                {/* Connection Status Badge */}
+                                {statusInfo ? (
+                                  statusInfo.isConnected ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                      Connected
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-500 border border-rose-500/30" title={statusInfo.lastError || 'Connection error'}>
+                                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                      Connection Error
+                                    </span>
+                                  )
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                    Not Verified
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+
+                            <div className="space-y-1 text-xs text-muted-foreground">
                               <p><strong className="text-foreground">User:</strong> {prof.user}</p>
-                              <p><strong className="text-foreground">Host:</strong> {prof.host}</p>
+                              <p><strong className="text-foreground">Host:</strong> {prof.host} <span className="text-muted-foreground">(Port {prof.port})</span></p>
                               {prof.from && <p><strong className="text-foreground">From:</strong> {prof.from}</p>}
                               <p className="text-[11px] text-muted-foreground/80">
                                 Security: {prof.secure ? 'SSL/TLS (Encrypted)' : 'STARTTLS (Standard)'}
                               </p>
                             </div>
+
+                            {/* Template Config with Email */}
+                            <div className="mt-3 pt-2 border-t flex items-center justify-between gap-2">
+                              <span className="text-[11px] font-semibold text-muted-foreground">Default Email Template:</span>
+                              <select
+                                value={assignedTemplateId}
+                                onChange={e => {
+                                  if (prof.id) {
+                                    setMapping(prof.id, e.target.value)
+                                    toast.success('Template mapping updated for email account!')
+                                  }
+                                }}
+                                className="px-2 py-1 rounded-lg border bg-background text-xs font-medium outline-none focus:ring-1 focus:ring-primary max-w-[200px]"
+                              >
+                                <option value="">None (Generic)</option>
+                                {emailTemplates.map(t => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.name} {t.isPrebuilt ? '(Prebuilt)' : '(Custom)'}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
 
                           <div className="flex items-center justify-between gap-2 pt-2 border-t text-xs">
-                            <div>
+                            <div className="flex items-center gap-2">
                               {!isDefault && prof.id && (
                                 <button
                                   type="button"
@@ -966,6 +1075,15 @@ export function SettingsPage() {
                               )}
                             </div>
                             <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleTestCardConnection(prof)}
+                                disabled={isTesting}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded border border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-500 transition-colors cursor-pointer disabled:opacity-50"
+                              >
+                                {isTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
+                                Test
+                              </button>
                               <button
                                 onClick={() => handleOpenEditForm(prof)}
                                 className="flex items-center gap-1 px-2.5 py-1 rounded border hover:bg-muted transition-colors cursor-pointer text-muted-foreground hover:text-foreground"
@@ -1301,6 +1419,107 @@ export function SettingsPage() {
                     )}
                   </div>
                 )}
+              </div>
+
+              {/* ─── EMAIL TEMPLATES MANAGEMENT SECTION ─── */}
+              <div className="space-y-4 pt-6 border-t">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      Email Templates ({emailTemplates.length})
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Choose from 10 prebuilt templates or create custom templates for invoices, proposals, reminders, and progress updates.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await resetDefaultTemplates()
+                        toast.success('Reset to 10 default prebuilt email templates!')
+                      }}
+                      className="px-3 py-1.5 border rounded-lg hover:bg-muted text-xs font-medium transition-colors cursor-pointer"
+                    >
+                      Reset 10 Prebuilt
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingEmailTemplate(null)
+                        setEmailTemplateModalOpen(true)
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground text-xs font-semibold rounded-lg hover:bg-primary/90 transition-colors shadow-sm cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add Custom Template
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {emailTemplates.map(tpl => (
+                    <div
+                      key={tpl.id}
+                      className="p-4 rounded-xl border bg-background shadow-sm hover:border-primary/40 transition-all flex flex-col justify-between space-y-3"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <span className="font-semibold text-sm text-foreground truncate">{tpl.name}</span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-muted text-muted-foreground uppercase">
+                              {tpl.category}
+                            </span>
+                            {tpl.isPrebuilt ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                                Prebuilt
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                Custom
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <p className="text-xs font-medium text-foreground truncate">
+                          <span className="text-muted-foreground">Subject:</span> {tpl.subject}
+                        </p>
+                        <p className="text-xs text-muted-foreground line-clamp-2 mt-1.5 font-mono bg-muted/30 p-2 rounded-lg border">
+                          {tpl.body}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t text-xs">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingEmailTemplate(tpl)
+                            setEmailTemplateModalOpen(true)
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded border hover:bg-muted transition-colors cursor-pointer text-muted-foreground hover:text-foreground"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          Edit
+                        </button>
+                        {!tpl.isPrebuilt && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const ok = await deleteEmailTemplate(tpl.id)
+                              if (ok) toast.success(`Deleted template "${tpl.name}"`)
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded border hover:bg-rose-500/10 hover:border-rose-500/30 text-rose-500 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </section>
           </div>
@@ -1712,6 +1931,12 @@ export function SettingsPage() {
         isOpen={templateModalOpen}
         onClose={() => setTemplateModalOpen(false)}
         template={editingTemplate}
+      />
+
+      <EmailTemplateEditorModal
+        open={emailTemplateModalOpen}
+        onClose={() => setEmailTemplateModalOpen(false)}
+        template={editingEmailTemplate}
       />
     </div>
   )

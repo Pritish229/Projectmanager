@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { EmptyState, ConfirmDialog } from '@/components/shared'
 import { toast } from '@/stores/useToastStore'
 import {
@@ -113,9 +114,15 @@ export function FilesTab({ projectId, isReadOnly = false }: FilesTabProps) {
   useEffect(() => { setSelectedIds(new Set()) }, [projectId, activeFolderId])
 
   useEffect(() => {
+    if (!contextMenu) return
     const close = () => setContextMenu(null)
-    if (contextMenu) window.addEventListener('click', close, { once: true })
-    return () => window.removeEventListener('click', close)
+    const timer = setTimeout(() => {
+      window.addEventListener('click', close)
+    }, 10)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('click', close)
+    }
   }, [contextMenu])
 
   const filteredFiles = useMemo(() => files.filter(file => {
@@ -183,7 +190,11 @@ export function FilesTab({ projectId, isReadOnly = false }: FilesTabProps) {
 
   const openContextMenu = (e: React.MouseEvent, type: 'file' | 'folder' | 'multi', targetId: string | null) => {
     e.preventDefault(); e.stopPropagation()
-    setContextMenu({ x: e.clientX, y: e.clientY, type, targetId })
+    const menuWidth = 215
+    const menuHeight = 260
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 16)
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 16)
+    setContextMenu({ x: Math.max(16, x), y: Math.max(16, y), type, targetId })
   }
   const handleUpload = async () => {
     setUploading(true); setError(null)
@@ -559,10 +570,10 @@ export function FilesTab({ projectId, isReadOnly = false }: FilesTabProps) {
         )}
       </div>
       {/* Context Menu */}
-      {contextMenu && (
+      {contextMenu && createPortal(
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} />
-          <div className="fixed z-50 w-52 bg-card rounded-xl border shadow-2xl py-1.5 animate-scale-in" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e => e.stopPropagation()}>
+          <div className="fixed inset-0 z-[9998]" onClick={() => setContextMenu(null)} />
+          <div className="fixed z-[9999] w-52 bg-card rounded-xl border shadow-2xl py-1.5 animate-scale-in" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e => e.stopPropagation()}>
             {contextMenu.type === 'file' && contextMenu.targetId && (() => {
               const file = files.find(f => f.id === contextMenu.targetId)
               if (!file) return null
@@ -575,13 +586,14 @@ export function FilesTab({ projectId, isReadOnly = false }: FilesTabProps) {
             })()}
             {contextMenu.type === 'multi' && (<>{hasFileSelection && !isReadOnly && <CtxItem icon={Move} label={`Move ${selectionCount} items...`} onClick={openMoveDialog} />}<CtxItem icon={Info} label="Properties" onClick={() => openProperties({ type: 'multi' })} />{!isReadOnly && (<><div className="my-1 border-t border-border" /><CtxItem icon={Trash2} label={`Delete ${selectionCount} items`} destructive onClick={() => { setIsBulkDeleteConfirmOpen(true); setContextMenu(null) }} /></>)}</>)}
           </div>
-        </>
+        </>,
+        document.body
       )}
       {/* Properties Panel */}
-      {propertiesTarget && propertiesContent && (
+      {propertiesTarget && propertiesContent && createPortal(
         <>
-          <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm" onClick={() => setPropertiesTarget(null)} />
-          <div className="fixed right-0 top-0 h-full w-80 bg-card border-l shadow-2xl z-50 flex flex-col">
+          <div className="fixed inset-0 z-[9998] bg-black/20 backdrop-blur-sm" onClick={() => setPropertiesTarget(null)} />
+          <div className="fixed right-0 top-0 h-full w-80 bg-card border-l shadow-2xl z-[9999] flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
               <h3 className="font-semibold text-sm flex items-center gap-2"><Info className="w-4 h-4 text-primary" /> Properties</h3>
               <button onClick={() => setPropertiesTarget(null)} className="p-1 rounded-md hover:bg-muted text-muted-foreground"><X className="w-4 h-4" /></button>
@@ -592,14 +604,75 @@ export function FilesTab({ projectId, isReadOnly = false }: FilesTabProps) {
               {propertiesContent.kind === 'multi' && (<><PropsRow label="Selected files" value={`${propertiesContent.files.length}`} /><PropsRow label="Selected folders" value={`${propertiesContent.folders.length}`} /><PropsRow label="Total size" value={formatBytes(propertiesContent.totalSize)} /><div><p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">By type</p>{(['image','document','other'] as const).map(cat => { const count = propertiesContent.files.filter(f => getFileCategory(f) === cat).length; if (!count) return null; return <PropsRow key={cat} label={cat.charAt(0).toUpperCase()+cat.slice(1)+'s'} value={`${count}`} /> })}</div></>)}
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
       {/* Create Folder Dialog */}
-      {createFolderOpen && (<><div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={() => setCreateFolderOpen(false)} /><div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-card border rounded-2xl shadow-2xl w-80 p-6"><h3 className="font-bold text-base mb-1 flex items-center gap-2"><FolderPlus className="w-4 h-4 text-primary" /> New Folder</h3><p className="text-xs text-muted-foreground mb-4">Enter a name for the new folder.</p><input type="text" value={newFolderName} onChange={e => setNewFolderName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') setCreateFolderOpen(false) }} placeholder="Folder name..." autoFocus className="w-full px-3 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary mb-4" /><div className="flex gap-2"><button onClick={() => setCreateFolderOpen(false)} className="flex-1 py-2 border rounded-lg text-sm hover:bg-muted transition-colors cursor-pointer">Cancel</button><button onClick={handleCreateFolder} disabled={!newFolderName.trim()} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors cursor-pointer disabled:opacity-50">Create</button></div></div></>)}
+      {createFolderOpen && createPortal(
+        <>
+          <div className="fixed inset-0 z-[9998] bg-black/40 backdrop-blur-sm" onClick={() => setCreateFolderOpen(false)} />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999] bg-card border rounded-2xl shadow-2xl w-80 p-6">
+            <h3 className="font-bold text-base mb-1 flex items-center gap-2"><FolderPlus className="w-4 h-4 text-primary" /> New Folder</h3>
+            <p className="text-xs text-muted-foreground mb-4">Enter a name for the new folder.</p>
+            <input type="text" value={newFolderName} onChange={e => setNewFolderName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') setCreateFolderOpen(false) }} placeholder="Folder name..." autoFocus className="w-full px-3 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary mb-4" />
+            <div className="flex gap-2">
+              <button onClick={() => setCreateFolderOpen(false)} className="flex-1 py-2 border rounded-lg text-sm hover:bg-muted transition-colors cursor-pointer">Cancel</button>
+              <button onClick={handleCreateFolder} disabled={!newFolderName.trim()} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors cursor-pointer disabled:opacity-50">Create</button>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
       {/* Move to Folder Dialog */}
-      {moveDialogOpen && (<><div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={() => setMoveDialogOpen(false)} /><div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-card border rounded-2xl shadow-2xl w-80 p-6"><h3 className="font-bold text-base mb-1 flex items-center gap-2"><Move className="w-4 h-4 text-primary" /> Move to Folder</h3><p className="text-xs text-muted-foreground mb-4">Select a destination for the selected files.</p><div className="space-y-1.5 max-h-48 overflow-y-auto mb-4"><FolderChoice label="Root (All Files)" icon={Home} selected={moveTargetFolderId === 'root'} onClick={() => setMoveTargetFolderId('root')} />{folders.map(f => <FolderChoice key={f.id} label={f.name} icon={Folder} selected={moveTargetFolderId === f.id} onClick={() => setMoveTargetFolderId(f.id)} />)}</div><div className="flex gap-2"><button onClick={() => setMoveDialogOpen(false)} className="flex-1 py-2 border rounded-lg text-sm hover:bg-muted transition-colors cursor-pointer">Cancel</button><button onClick={handleMoveSelected} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors cursor-pointer">Move Here</button></div></div></>)}
+      {moveDialogOpen && createPortal(
+        <>
+          <div className="fixed inset-0 z-[9998] bg-black/40 backdrop-blur-sm" onClick={() => setMoveDialogOpen(false)} />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999] bg-card border rounded-2xl shadow-2xl w-80 p-6">
+            <h3 className="font-bold text-base mb-1 flex items-center gap-2"><Move className="w-4 h-4 text-primary" /> Move to Folder</h3>
+            <p className="text-xs text-muted-foreground mb-4">Select a destination for the selected files.</p>
+            <div className="space-y-1.5 max-h-48 overflow-y-auto mb-4">
+              <FolderChoice label="Root (All Files)" icon={Home} selected={moveTargetFolderId === 'root'} onClick={() => setMoveTargetFolderId('root')} />
+              {folders.map(f => <FolderChoice key={f.id} label={f.name} icon={Folder} selected={moveTargetFolderId === f.id} onClick={() => setMoveTargetFolderId(f.id)} />)}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setMoveDialogOpen(false)} className="flex-1 py-2 border rounded-lg text-sm hover:bg-muted transition-colors cursor-pointer">Cancel</button>
+              <button onClick={handleMoveSelected} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors cursor-pointer">Move Here</button>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
       {/* Delete Folder Dialog */}
-      {deleteFolderState && (<><div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={() => setDeleteFolderState(null)} /><div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-card border rounded-2xl shadow-2xl w-80 p-6"><h3 className="font-bold text-base mb-1 flex items-center gap-2 text-destructive"><Trash2 className="w-4 h-4" /> Delete Folder</h3><p className="text-sm text-muted-foreground mb-4">What happens to files inside <strong>"{deleteFolderState.name}"</strong>?</p><div className="space-y-2 mb-4"><label className="flex items-start gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted transition-colors"><input type="radio" name="folderDel" checked={deleteFolderKeepFiles} onChange={() => setDeleteFolderKeepFiles(true)} className="mt-0.5 accent-primary" /><div><p className="text-sm font-medium">Keep files (move to root)</p><p className="text-xs text-muted-foreground">Files stay in the project, moved back to All Files.</p></div></label><label className="flex items-start gap-3 p-3 rounded-lg border border-destructive/30 bg-destructive/5 cursor-pointer hover:bg-destructive/10 transition-colors"><input type="radio" name="folderDel" checked={!deleteFolderKeepFiles} onChange={() => setDeleteFolderKeepFiles(false)} className="mt-0.5 accent-destructive" /><div><p className="text-sm font-medium text-destructive">Delete all files inside</p><p className="text-xs text-muted-foreground">Permanently deletes the folder and all files within it.</p></div></label></div><div className="flex gap-2"><button onClick={() => setDeleteFolderState(null)} className="flex-1 py-2 border rounded-lg text-sm hover:bg-muted transition-colors cursor-pointer">Cancel</button><button onClick={handleDeleteFolder} className="flex-1 py-2 bg-destructive text-destructive-foreground rounded-lg text-sm font-semibold hover:bg-destructive/90 transition-colors cursor-pointer">Delete</button></div></div></>)}
+      {deleteFolderState && createPortal(
+        <>
+          <div className="fixed inset-0 z-[9998] bg-black/40 backdrop-blur-sm" onClick={() => setDeleteFolderState(null)} />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999] bg-card border rounded-2xl shadow-2xl w-80 p-6">
+            <h3 className="font-bold text-base mb-1 flex items-center gap-2 text-destructive"><Trash2 className="w-4 h-4" /> Delete Folder</h3>
+            <p className="text-sm text-muted-foreground mb-4">What happens to files inside <strong>"{deleteFolderState.name}"</strong>?</p>
+            <div className="space-y-2 mb-4">
+              <label className="flex items-start gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted transition-colors">
+                <input type="radio" name="folderDel" checked={deleteFolderKeepFiles} onChange={() => setDeleteFolderKeepFiles(true)} className="mt-0.5 accent-primary" />
+                <div>
+                  <p className="text-sm font-medium">Keep files (move to root)</p>
+                  <p className="text-xs text-muted-foreground">Files stay in the project, moved back to All Files.</p>
+                </div>
+              </label>
+              <label className="flex items-start gap-3 p-3 rounded-lg border border-destructive/30 bg-destructive/5 cursor-pointer hover:bg-destructive/10 transition-colors">
+                <input type="radio" name="folderDel" checked={!deleteFolderKeepFiles} onChange={() => setDeleteFolderKeepFiles(false)} className="mt-0.5 accent-destructive" />
+                <div>
+                  <p className="text-sm font-medium text-destructive">Delete all files inside</p>
+                  <p className="text-xs text-muted-foreground">Permanently deletes the folder and all files within it.</p>
+                </div>
+              </label>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteFolderState(null)} className="flex-1 py-2 border rounded-lg text-sm hover:bg-muted transition-colors cursor-pointer">Cancel</button>
+              <button onClick={handleDeleteFolder} className="flex-1 py-2 bg-destructive text-destructive-foreground rounded-lg text-sm font-semibold hover:bg-destructive/90 transition-colors cursor-pointer">Delete</button>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
       <ConfirmDialog open={!!deleteConfirmId} onClose={() => setDeleteConfirmId(null)} onConfirm={handleDelete} title="Delete File" description="Permanently delete this file? This action cannot be undone." confirmLabel="Delete File" variant="danger" />
       <ConfirmDialog open={isBulkDeleteConfirmOpen} onClose={() => setIsBulkDeleteConfirmOpen(false)} onConfirm={handleBulkDelete} title="Delete Selected Items" description={`Delete the ${selectionCount} selected item(s)? This permanently erases all selected files and folders.`} confirmLabel="Delete All" variant="danger" />
     </div>

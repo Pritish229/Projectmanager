@@ -10,6 +10,8 @@ import {
 } from 'lucide-react'
 
 import { InvoicePreviewModal } from './InvoicePreviewModal'
+import { useEmailTemplateStore } from '@/stores/useEmailTemplateStore'
+import { getEmailProviderInfo } from '@/lib/emailProviderHelper'
 
 interface Props {
   projectId: string
@@ -68,12 +70,89 @@ export function InvoicesTab({ projectId }: Props) {
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // Send Email Form state
+  const { templates: emailTemplates, fetchTemplates: fetchEmailTemplates, profileMappings, fetchMappings, profileStatuses, fetchStatuses, processTemplateText } = useEmailTemplateStore()
   const [smtpProfiles, setSmtpProfiles] = useState<any[]>([])
   const [selectedSmtpId, setSelectedSmtpId] = useState<string>('')
   const [recipientEmail, setRecipientEmail] = useState('')
+  const [ccEmail, setCcEmail] = useState('')
+  const [selectedEmailTemplateId, setSelectedEmailTemplateId] = useState('')
   const [emailSubject, setEmailSubject] = useState('')
   const [emailBody, setEmailBody] = useState('')
   const [sendingMail, setSendingMail] = useState(false)
+
+  useEffect(() => {
+    fetchEmailTemplates()
+    fetchMappings()
+    fetchStatuses()
+  }, [])
+
+  const applyEmailTemplate = (templateId: string, inv: Invoice) => {
+    setSelectedEmailTemplateId(templateId)
+    const tpl = emailTemplates.find(t => t.id === templateId)
+    if (!tpl) return
+    const vars = {
+      client_name: inv.clientName || 'Valued Client',
+      invoice_number: inv.invoiceNumber || '',
+      amount: `${inv.currencySymbol}${inv.totalAmount.toFixed(2)}`,
+      due_date: inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'Upon Receipt',
+      company_name: inv.companyName || 'Our Company',
+      project_name: currentProject?.name || 'Project'
+    }
+    setEmailSubject(processTemplateText(tpl.subject, vars))
+    setEmailBody(processTemplateText(tpl.body, vars))
+  }
+
+  const openMailDialog = (inv: Invoice) => {
+    setMailInvoice(inv)
+    setRecipientEmail(inv.clientEmail || currentProject?.client?.email || '')
+    setCcEmail('')
+
+    const targetProfileId = selectedSmtpId || smtpProfiles[0]?.id || ''
+    const assignedTplId = targetProfileId ? profileMappings[targetProfileId] : ''
+
+    if (assignedTplId) {
+      applyEmailTemplate(assignedTplId, inv)
+    } else {
+      setSelectedEmailTemplateId('')
+      setEmailSubject(`Invoice #${inv.invoiceNumber} for ${currentProject?.name || 'Project'}`)
+      setEmailBody(
+        `Hello ${inv.clientName || 'Valued Client'},\n\nPlease find attached invoice #${inv.invoiceNumber} for your review.\n\nTotal Amount Due: ${inv.currencySymbol}${inv.totalAmount.toFixed(2)}\nDue Date: ${inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'Upon Receipt'}\n\nThank you for working with us!`
+      )
+    }
+    setIsSendMailOpen(true)
+  }
+
+  const handleSendEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!mailInvoice) return
+    if (!recipientEmail.trim()) {
+      toast.error('Validation Error', 'Recipient email is required.')
+      return
+    }
+
+    setSendingMail(true)
+    try {
+      const res = await sendEmail({
+        invoiceId: mailInvoice.id,
+        smtpProfileId: selectedSmtpId,
+        recipientEmail,
+        cc: ccEmail,
+        subject: emailSubject,
+        bodyMessage: emailBody
+      })
+
+      if (res.success) {
+        toast.success('Email Sent', `Invoice #${mailInvoice.invoiceNumber} emailed to ${recipientEmail}`)
+        setIsSendMailOpen(false)
+      } else {
+        toast.error('Email Failed', res.error || 'Failed to send email')
+      }
+    } catch (err: any) {
+      toast.error('Error', err.message || 'Email dispatch error')
+    } finally {
+      setSendingMail(false)
+    }
+  }
 
   // Editor Form state
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
@@ -340,47 +419,6 @@ export function InvoicesTab({ projectId }: Props) {
       toast.success('PDF Exported', `Saved to ${res.filePath}`)
     } else if (!res.canceled) {
       toast.error('PDF Generation Failed', res.error || 'Failed to export PDF')
-    }
-  }
-
-  const openMailDialog = (inv: Invoice) => {
-    setMailInvoice(inv)
-    setRecipientEmail(inv.clientEmail || currentProject?.client?.email || '')
-    setEmailSubject(`Invoice #${inv.invoiceNumber} for ${currentProject?.name || 'Project'}`)
-    setEmailBody(
-      `Hello ${inv.clientName || 'Valued Client'},\n\nPlease find attached invoice #${inv.invoiceNumber} for your review.\n\nTotal Amount Due: ${inv.currencySymbol}${inv.totalAmount.toFixed(2)}\nDue Date: ${inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'Upon Receipt'}\n\nThank you for working with us!`
-    )
-    setIsSendMailOpen(true)
-  }
-
-  const handleSendEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!mailInvoice) return
-    if (!recipientEmail.trim()) {
-      toast.error('Validation Error', 'Recipient email is required.')
-      return
-    }
-
-    setSendingMail(true)
-    try {
-      const res = await sendEmail({
-        invoiceId: mailInvoice.id,
-        smtpProfileId: selectedSmtpId,
-        recipientEmail,
-        subject: emailSubject,
-        bodyMessage: emailBody
-      })
-
-      if (res.success) {
-        toast.success('Email Sent', `Invoice #${mailInvoice.invoiceNumber} emailed to ${recipientEmail}`)
-        setIsSendMailOpen(false)
-      } else {
-        toast.error('Email Failed', res.error || 'Failed to send email')
-      }
-    } catch (err: any) {
-      toast.error('Error', err.message || 'Email dispatch error')
-    } finally {
-      setSendingMail(false)
     }
   }
 
@@ -1046,28 +1084,71 @@ export function InvoicesTab({ projectId }: Props) {
                   </div>
                 ) : (
                   <select
-                    className="w-full px-3 py-2 text-xs rounded-md border bg-background"
+                    className="w-full px-3 py-2 text-xs rounded-md border bg-background font-medium"
                     value={selectedSmtpId}
-                    onChange={(e) => setSelectedSmtpId(e.target.value)}
+                    onChange={(e) => {
+                      const newId = e.target.value
+                      setSelectedSmtpId(newId)
+                      const assignedTplId = profileMappings[newId]
+                      if (assignedTplId && mailInvoice) {
+                        applyEmailTemplate(assignedTplId, mailInvoice)
+                      }
+                    }}
                   >
-                    {smtpProfiles.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.user})
-                      </option>
-                    ))}
+                    {smtpProfiles.map((p) => {
+                      const provider = getEmailProviderInfo(p.host, p.user, p.name)
+                      const status = profileStatuses[p.id]
+                      const statusDot = status?.isConnected ? '🟢' : (status ? '🔴' : '🟠')
+                      const statusText = status?.isConnected ? 'Connected' : (status ? 'Error' : 'Not Verified')
+                      return (
+                        <option key={p.id} value={p.id}>
+                          {statusDot} [{provider.name}] {p.name} ({p.user}) - {statusText}
+                        </option>
+                      )
+                    })}
                   </select>
                 )}
               </div>
 
               <div>
-                <label className="block text-xs font-semibold mb-1">Recipient Email Address *</label>
-                <input
-                  type="email"
-                  required
-                  className="w-full px-3 py-2 text-xs rounded-md border bg-background"
-                  value={recipientEmail}
-                  onChange={(e) => setRecipientEmail(e.target.value)}
-                />
+                <label className="block text-xs font-semibold mb-1">Email Template</label>
+                <select
+                  className="w-full px-3 py-2 text-xs rounded-md border bg-background font-medium"
+                  value={selectedEmailTemplateId}
+                  onChange={(e) => {
+                    if (mailInvoice) applyEmailTemplate(e.target.value, mailInvoice)
+                  }}
+                >
+                  <option value="">Default Generic Invoice Email</option>
+                  {emailTemplates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.category}) {t.isPrebuilt ? '— Prebuilt' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1">Recipient Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    className="w-full px-3 py-2 text-xs rounded-md border bg-background"
+                    value={recipientEmail}
+                    onChange={(e) => setRecipientEmail(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1">CC (Carbon Copy - optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. cc@company.com, boss@company.com"
+                    className="w-full px-3 py-2 text-xs rounded-md border bg-background"
+                    value={ccEmail}
+                    onChange={(e) => setCcEmail(e.target.value)}
+                  />
+                </div>
               </div>
 
               <div>

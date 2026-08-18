@@ -194,7 +194,16 @@ const api = {
     getProfiles: () => ipcRenderer.invoke('email:getProfiles'),
     saveProfile: (profile: unknown) => ipcRenderer.invoke('email:saveProfile', profile),
     deleteProfile: (id: string) => ipcRenderer.invoke('email:deleteProfile', id),
-    getProfilePass: (id: string) => ipcRenderer.invoke('email:getProfilePass', id)
+    getProfilePass: (id: string) => ipcRenderer.invoke('email:getProfilePass', id),
+    // Email Templates & Profile Mappings & Status
+    getTemplates: () => ipcRenderer.invoke('email:getTemplates'),
+    saveTemplate: (template: unknown) => ipcRenderer.invoke('email:saveTemplate', template),
+    deleteTemplate: (id: string) => ipcRenderer.invoke('email:deleteTemplate', id),
+    resetDefaultTemplates: () => ipcRenderer.invoke('email:resetDefaultTemplates'),
+    getProfileTemplateMappings: () => ipcRenderer.invoke('email:getProfileTemplateMappings'),
+    setProfileTemplateMapping: (params: { profileId: string; templateId: string }) => ipcRenderer.invoke('email:setProfileTemplateMapping', params),
+    setProfileStatus: (params: { profileId: string; isConnected: boolean; lastError?: string }) => ipcRenderer.invoke('email:setProfileStatus', params),
+    getProfileStatuses: () => ipcRenderer.invoke('email:getProfileStatuses')
   },
 
   // Invoices

@@ -4,8 +4,37 @@ import { getPrisma } from '../database'
 export function registerNotificationHandlers(): void {
   const prisma = getPrisma()
 
+  // Helper to deduplicate existing notifications in DB
+  const cleanupDuplicates = async () => {
+    try {
+      const allNotifs = await prisma.notification.findMany({
+        orderBy: { createdAt: 'desc' }
+      })
+      const seen = new Set<string>()
+      const duplicateIds: string[] = []
+
+      for (const notif of allNotifs) {
+        const key = `${notif.type}|${notif.title}|${notif.message}|${notif.projectId || ''}`
+        if (seen.has(key)) {
+          duplicateIds.push(notif.id)
+        } else {
+          seen.add(key)
+        }
+      }
+
+      if (duplicateIds.length > 0) {
+        await prisma.notification.deleteMany({
+          where: { id: { in: duplicateIds } }
+        })
+      }
+    } catch (err) {
+      console.error('Failed to cleanup duplicate notifications:', err)
+    }
+  }
+
   // Get all notifications
   ipcMain.handle('notifications:getAll', async (_, unreadOnly?: boolean) => {
+    await cleanupDuplicates()
     const where = unreadOnly ? { read: false } : {}
     return prisma.notification.findMany({
       where,
@@ -45,6 +74,20 @@ export function registerNotificationHandlers(): void {
     projectId?: string
     showDesktop?: boolean
   }) => {
+    // Prevent creating exact duplicate if identical unread notification exists
+    const existing = await prisma.notification.findFirst({
+      where: {
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        projectId: data.projectId || null
+      }
+    })
+
+    if (existing) {
+      return existing
+    }
+
     const notification = await prisma.notification.create({
       data: {
         type: data.type,
@@ -68,6 +111,7 @@ export function registerNotificationHandlers(): void {
 
   // Check for overdue todos and upcoming deadlines
   ipcMain.handle('notifications:checkDeadlines', async () => {
+    await cleanupDuplicates()
     const now = new Date()
     const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000)
 
@@ -81,12 +125,12 @@ export function registerNotificationHandlers(): void {
     })
 
     for (const todo of overdueTodos) {
-      // Check if we already notified
+      // Check if we already notified for this todo
       const existing = await prisma.notification.findFirst({
         where: {
           type: 'overdue',
-          message: { contains: todo.id },
-          createdAt: { gt: new Date(now.getTime() - 24 * 60 * 60 * 1000) }
+          projectId: todo.projectId,
+          message: { contains: `"${todo.title}"` }
         }
       })
 
@@ -115,8 +159,8 @@ export function registerNotificationHandlers(): void {
       const existing = await prisma.notification.findFirst({
         where: {
           type: 'deadline',
-          message: { contains: todo.id },
-          createdAt: { gt: new Date(now.getTime() - 24 * 60 * 60 * 1000) }
+          projectId: todo.projectId,
+          message: { contains: `"${todo.title}"` }
         }
       })
 

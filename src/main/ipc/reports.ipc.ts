@@ -41,9 +41,10 @@ export function registerReportHandlers(): void {
     const pending = todos.filter(t => t.status === 'pending').length
     const inProgress = todos.filter(t => t.status === 'in_progress').length
     const blocked = todos.filter(t => t.status === 'blocked').length
-    const overdue = todos.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'completed').length
+    const cancelled = todos.filter(t => t.status === 'cancelled').length
+    const overdue = todos.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'completed' && t.status !== 'cancelled').length
 
-    return { todos, total, completed, pending, inProgress, blocked, overdue }
+    return { todos, total, completed, pending, inProgress, blocked, cancelled, overdue }
   })
 
   // Deliverable summary report
@@ -59,8 +60,10 @@ export function registerReportHandlers(): void {
     const approved = deliverables.filter(d => d.status === 'approved').length
     const rejected = deliverables.filter(d => d.status === 'rejected').length
     const pending = deliverables.filter(d => d.status === 'sent').length
+    const draft = deliverables.filter(d => d.status === 'draft').length
+    const ready = deliverables.filter(d => d.status === 'ready').length
 
-    return { deliverables, total, approved, rejected, pending }
+    return { deliverables, total, approved, rejected, pending, draft, ready }
   })
 
   // Approval summary report
@@ -77,16 +80,92 @@ export function registerReportHandlers(): void {
 
     const total = approvals.length
     const approved = approvals.filter(a => a.status === 'approved').length
-    const rejected = approvals.filter(a => a.status === 'rejected').length
-    const pending = approvals.filter(a => a.status === 'pending').length
+    const rejected = approvals.filter(a => a.status === 'rejected' || a.status === 'changes_requested').length
+    const pending = approvals.filter(a => a.status === 'pending' || a.status === 'resubmitted').length
 
     return { approvals, total, approved, rejected, pending }
   })
 
   // ─────────────────────────────────────────────────────────────
-  // NEW: Full project summary for a single project (for summary card + PDF)
+  // NEW: Full project summary for a single project OR all projects portfolio
   // ─────────────────────────────────────────────────────────────
   ipcMain.handle('reports:getProjectFullSummary', async (_, projectId: string) => {
+    if (!projectId || projectId === 'all') {
+      const projects = await prisma.project.findMany({
+        where: { archived: false },
+        include: {
+          client: true,
+          user: true,
+          todos: { orderBy: { sortOrder: 'asc' } },
+          deliverables: { include: { approvals: { orderBy: { createdAt: 'desc' }, take: 1 } } },
+          notes: true,
+          files: true,
+          activityLogs: { orderBy: { createdAt: 'desc' }, take: 5 }
+        }
+      })
+
+      if (projects.length === 0) return null
+
+      const todos = projects.flatMap(p => p.todos.map(t => ({ ...t, project: { id: p.id, name: p.name, code: p.code } })))
+      const deliverables = projects.flatMap(p => p.deliverables.map(d => ({ ...d, project: { id: p.id, name: p.name, code: p.code } })))
+      const notes = projects.flatMap(p => p.notes)
+      const files = projects.flatMap(p => p.files)
+      const totalFilesSize = files.reduce((acc, f) => acc + (f.size || 0), 0)
+      const allActivity = projects
+        .flatMap(p => p.activityLogs)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 15)
+
+      const todoStats = {
+        total: todos.length,
+        completed: todos.filter(t => t.status === 'completed').length,
+        inProgress: todos.filter(t => t.status === 'in_progress').length,
+        pending: todos.filter(t => t.status === 'pending').length,
+        blocked: todos.filter(t => t.status === 'blocked').length,
+        cancelled: todos.filter(t => t.status === 'cancelled').length,
+        overdue: todos.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'completed' && t.status !== 'cancelled').length,
+        completionRate: todos.length > 0 ? Math.round((todos.filter(t => t.status === 'completed').length / todos.length) * 100) : 0
+      }
+
+      const deliverableStats = {
+        total: deliverables.length,
+        approved: deliverables.filter(d => d.status === 'approved').length,
+        rejected: deliverables.filter(d => d.status === 'rejected').length,
+        sent: deliverables.filter(d => d.status === 'sent').length,
+        draft: deliverables.filter(d => d.status === 'draft').length,
+        ready: deliverables.filter(d => d.status === 'ready').length,
+        completionRate: deliverables.length > 0 ? Math.round((deliverables.filter(d => d.status === 'approved').length / deliverables.length) * 100) : 0
+      }
+
+      return {
+        isPortfolio: true,
+        project: {
+          id: 'all',
+          name: 'All Projects Portfolio',
+          code: 'PORTFOLIO',
+          description: `Consolidated overview across ${projects.length} active project${projects.length === 1 ? '' : 's'}`,
+          status: 'active',
+          priority: 'medium',
+          startDate: null,
+          deadline: null,
+          tags: `${projects.length} Active Projects`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          archived: false
+        },
+        client: null,
+        user: null,
+        todoStats,
+        todos: todos.map(t => ({ id: t.id, title: t.title, status: t.status, priority: t.priority, dueDate: t.dueDate, project: t.project })),
+        deliverableStats,
+        deliverables: deliverables.map(d => ({ id: d.id, title: d.title, status: d.status, version: d.version, fileName: d.fileName, project: d.project })),
+        notesCount: notes.length,
+        filesCount: files.length,
+        totalFilesSize,
+        recentActivity: allActivity.map(a => ({ action: a.action, message: a.message, createdAt: a.createdAt }))
+      }
+    }
+
     const project = await prisma.project.findUnique({
       where: { id: projectId },
       include: {
@@ -134,6 +213,7 @@ export function registerReportHandlers(): void {
     const totalFilesSize = files.reduce((acc, f) => acc + (f.size || 0), 0)
 
     return {
+      isPortfolio: false,
       project: {
         id: project.id,
         name: project.name,
@@ -151,9 +231,9 @@ export function registerReportHandlers(): void {
       client: project.client,
       user: project.user,
       todoStats,
-      todos: todos.map(t => ({ id: t.id, title: t.title, status: t.status, priority: t.priority, dueDate: t.dueDate })),
+      todos: todos.map(t => ({ id: t.id, title: t.title, status: t.status, priority: t.priority, dueDate: t.dueDate, project: { id: project.id, name: project.name, code: project.code } })),
       deliverableStats,
-      deliverables: deliverables.map(d => ({ id: d.id, title: d.title, status: d.status, version: d.version, fileName: d.fileName })),
+      deliverables: deliverables.map(d => ({ id: d.id, title: d.title, status: d.status, version: d.version, fileName: d.fileName, project: { id: project.id, name: project.name, code: project.code } })),
       notesCount: notes.length,
       filesCount: files.length,
       totalFilesSize,
@@ -346,7 +426,7 @@ export function registerReportHandlers(): void {
     // ── 1. HEADER BANNER ──
     const headerHeight = 70
     drawRect(0, H - headerHeight, W, headerHeight, INDIGO)
-    drawText('PROJECT SUMMARY REPORT', MARGIN_LEFT, H - 32, 17, boldFont, WHITE)
+    drawText(summaryData.isPortfolio ? 'PORTFOLIO SUMMARY REPORT' : 'PROJECT SUMMARY REPORT', MARGIN_LEFT, H - 32, 17, boldFont, WHITE)
     const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
     drawText(`Generated: ${dateStr}`, MARGIN_LEFT, H - 50, 8.5, regularFont, rgb(0.92, 0.93, 0.98))
 
@@ -377,7 +457,7 @@ export function registerReportHandlers(): void {
     drawText(projName, leftColX, currentY, 13, boldFont, DARK)
 
     // Right Column Content: Deadline Box
-    const deadlineStr = project.deadline ? new Date(project.deadline).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Not set'
+    const deadlineStr = project.deadline ? new Date(project.deadline).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : (summaryData.isPortfolio ? 'Portfolio Active' : 'Not set')
     const deadlineBoxW = 110
     const deadlineBoxH = 42
     const deadlineBoxX = RIGHT_X - 15 - deadlineBoxW

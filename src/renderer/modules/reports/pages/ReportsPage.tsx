@@ -55,7 +55,7 @@ import {
   RadialBarChart,
   RadialBar
 } from 'recharts'
-import { cn } from '@/lib/utils'
+import { cn, formatDate } from '@/lib/utils'
 import { getEmailProviderInfo } from '@/lib/emailProviderHelper'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -911,8 +911,8 @@ function PdfThemeSelector({
 }
 
 // ─── Project Summary Tab ───────────────────────────────────────────────────────
-function ProjectSummaryTab({ projectId, projects, onEmailOpen }: {
-  projectId: string; projects: any[]; onEmailOpen: (pdfBase64: string, filename: string, projectName: string) => void
+function ProjectSummaryTab({ projectId, projects, onEmailOpen, onSelectProject }: {
+  projectId: string; projects: any[]; onEmailOpen: (pdfBase64: string, filename: string, projectName: string) => void; onSelectProject?: (id: string) => void
 }) {
   const [summary, setSummary] = useState<any>(null)
   const [loading, setLoading] = useState(false)
@@ -921,7 +921,6 @@ function ProjectSummaryTab({ projectId, projects, onEmailOpen }: {
   const [pdfTheme, setPdfTheme] = useState<string>('indigo')
 
   const load = useCallback(async () => {
-    if (!projectId || projectId === 'all') { setSummary(null); return }
     setLoading(true); setError(null)
     try {
       const data = await window.api.reports.getProjectFullSummary(projectId)
@@ -959,10 +958,10 @@ function ProjectSummaryTab({ projectId, projects, onEmailOpen }: {
     finally { setGeneratingPdf(false) }
   }
 
-  if (!projectId || projectId === 'all') {
+  if (projects.length === 0 && (!summary || projectId === 'all')) {
     return (
-      <EmptyState icon={ClipboardList} title="Select a Project"
-        description="Choose a specific project from the dropdown above to view its full summary report." />
+      <EmptyState icon={ClipboardList} title="No Projects Available"
+        description="Create your first project to start seeing executive summary reports and analytics." />
     )
   }
 
@@ -978,7 +977,12 @@ function ProjectSummaryTab({ projectId, projects, onEmailOpen }: {
     </div>
   )
 
-  if (!summary) return null
+  if (!summary) {
+    return (
+      <EmptyState icon={ClipboardList} title="Select a Project"
+        description="Choose a specific project from the dropdown above to view its full summary report." />
+    )
+  }
 
   const { project, client, todoStats, deliverableStats, notesCount, filesCount, totalFilesSize, todos, deliverables, recentActivity } = summary
 
@@ -1037,6 +1041,41 @@ function ProjectSummaryTab({ projectId, projects, onEmailOpen }: {
           </button>
         </div>
       </div>
+
+      {/* Quick Project Switcher */}
+      {projects.length > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider shrink-0 mr-1">Switch:</span>
+          <button
+            type="button"
+            onClick={() => onSelectProject?.('all')}
+            className={cn(
+              'px-3 py-1 rounded-full border text-xs font-medium transition-all cursor-pointer shrink-0',
+              projectId === 'all'
+                ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                : 'bg-card text-muted-foreground hover:text-foreground hover:bg-muted/50 border-border'
+            )}
+          >
+            All Projects Portfolio
+          </button>
+          {projects.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onSelectProject?.(p.id)}
+              className={cn(
+                'px-3 py-1 rounded-full border text-xs font-medium transition-all cursor-pointer shrink-0 flex items-center gap-1.5',
+                projectId === p.id
+                  ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                  : 'bg-card text-muted-foreground hover:text-foreground hover:bg-muted/50 border-border'
+              )}
+            >
+              <span className="font-mono text-[10px] opacity-80">{p.code}</span>
+              <span className="truncate max-w-[130px]">{p.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Overdue warning */}
       {todoStats.overdue > 0 && (
@@ -1122,11 +1161,11 @@ function ProjectSummaryTab({ projectId, projects, onEmailOpen }: {
             </div>
             <div className="flex items-start gap-2">
               <span className="text-muted-foreground w-20 shrink-0">Deadline</span>
-              <span className="font-semibold">{project.deadline ? formatDate(project.deadline) : '—'}</span>
+              <span className="font-semibold">{project.deadline ? formatDate(project.deadline) : (summary.isPortfolio ? 'Portfolio Active' : '—')}</span>
             </div>
             <div className="flex items-start gap-2">
               <span className="text-muted-foreground w-20 shrink-0">Created</span>
-              <span className="font-semibold">{formatDate(project.createdAt)}</span>
+              <span className="font-semibold">{summary.isPortfolio ? 'Portfolio Active' : formatDate(project.createdAt)}</span>
             </div>
             {project.tags && (
               <div className="flex items-start gap-2">
@@ -1263,7 +1302,12 @@ function ProjectSummaryTab({ projectId, projects, onEmailOpen }: {
               <tbody className="divide-y divide-border">
                 {todos.slice(0, 15).map((t: any) => (
                   <tr key={t.id} className="hover:bg-muted/10 transition-colors">
-                    <td className="px-4 py-3 font-medium">{t.title}</td>
+                    <td className="px-4 py-3 font-medium">
+                      <div>{t.title}</div>
+                      {t.project?.name && (summary.isPortfolio || projectId === 'all') && (
+                        <div className="text-[11px] text-muted-foreground font-mono">{t.project.code} · {t.project.name}</div>
+                      )}
+                    </td>
                     <td className="px-4 py-3"><StatusBadge status={t.status} /></td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5"><PriorityDot priority={t.priority} /><span className="capitalize text-xs">{t.priority}</span></div>
@@ -1305,7 +1349,12 @@ function ProjectSummaryTab({ projectId, projects, onEmailOpen }: {
               <tbody className="divide-y divide-border">
                 {deliverables.map((d: any) => (
                   <tr key={d.id} className="hover:bg-muted/10 transition-colors">
-                    <td className="px-4 py-3 font-medium">{d.title}</td>
+                    <td className="px-4 py-3 font-medium">
+                      <div>{d.title}</div>
+                      {d.project?.name && (summary.isPortfolio || projectId === 'all') && (
+                        <div className="text-[11px] text-muted-foreground font-mono">{d.project.code} · {d.project.name}</div>
+                      )}
+                    </td>
                     <td className="px-4 py-3"><StatusBadge status={d.status} /></td>
                     <td className="px-4 py-3 text-muted-foreground text-xs font-mono">v{d.version}</td>
                     <td className="px-4 py-3 text-right text-muted-foreground text-xs">{d.fileName || '—'}</td>
@@ -1563,27 +1612,31 @@ export function ReportsPage() {
       }
     }
     if (activeTab === 'todos') {
-      if (!reportData.completed && !reportData.pending) return []
+      if (!reportData || !reportData.total) return []
       return [
-        { name: 'Completed', value: reportData.completed, color: '#10b981' },
-        { name: 'In Progress', value: reportData.inProgress, color: '#3b82f6' },
-        { name: 'Pending', value: reportData.pending, color: '#f59e0b' },
-        { name: 'Blocked', value: reportData.blocked, color: '#ef4444' }
+        { name: 'Completed', value: reportData.completed || 0, color: '#10b981' },
+        { name: 'In Progress', value: reportData.inProgress || 0, color: '#3b82f6' },
+        { name: 'Pending', value: reportData.pending || 0, color: '#f59e0b' },
+        { name: 'Blocked', value: reportData.blocked || 0, color: '#ef4444' },
+        { name: 'Cancelled', value: reportData.cancelled || 0, color: '#64748b' }
       ].filter(d => d.value > 0)
     }
     if (activeTab === 'deliverables') {
+      if (!reportData || !reportData.total) return []
       return [
-        { name: 'Approved', value: reportData.approved, color: '#10b981' },
-        { name: 'Pending', value: reportData.pending, color: '#3b82f6' },
-        { name: 'Rejected', value: reportData.rejected, color: '#ef4444' },
-        { name: 'Other', value: Math.max(0, reportData.total - reportData.approved - reportData.pending - reportData.rejected), color: '#94a3b8' }
+        { name: 'Approved', value: reportData.approved || 0, color: '#10b981' },
+        { name: 'Sent (Pending)', value: reportData.pending || 0, color: '#3b82f6' },
+        { name: 'Ready', value: reportData.ready || 0, color: '#6366f1' },
+        { name: 'Draft', value: reportData.draft || 0, color: '#94a3b8' },
+        { name: 'Rejected', value: reportData.rejected || 0, color: '#ef4444' }
       ].filter(d => d.value > 0)
     }
     if (activeTab === 'approvals') {
+      if (!reportData || !reportData.total) return []
       return [
-        { name: 'Approved', value: reportData.approved, color: '#10b981' },
-        { name: 'Changes Requested', value: reportData.rejected, color: '#ef4444' },
-        { name: 'Pending', value: reportData.pending, color: '#f59e0b' }
+        { name: 'Approved', value: reportData.approved || 0, color: '#10b981' },
+        { name: 'Changes Requested / Rejected', value: reportData.rejected || 0, color: '#ef4444' },
+        { name: 'Pending Review', value: reportData.pending || 0, color: '#f59e0b' }
       ].filter(d => d.value > 0)
     }
     return []
@@ -1593,7 +1646,14 @@ export function ReportsPage() {
     if (!reportData) return
     setExportingPdf(true)
     try {
-      const base64 = await window.api.reports.generatePdf(activeTab, { data: 'see report' })
+      const summaryPayload = activeTab === 'projects'
+        ? { 'Total Projects': Array.isArray(reportData) ? reportData.length : 1 }
+        : activeTab === 'todos'
+        ? { 'Total Tasks': reportData.total, 'Completed': reportData.completed, 'In Progress': reportData.inProgress, 'Pending': reportData.pending, 'Blocked': reportData.blocked, 'Overdue': reportData.overdue }
+        : activeTab === 'deliverables'
+        ? { 'Total Deliverables': reportData.total, 'Approved': reportData.approved, 'Sent/Pending': reportData.pending, 'Ready': reportData.ready || 0, 'Draft': reportData.draft || 0, 'Rejected': reportData.rejected }
+        : { 'Total Approvals': reportData.total, 'Approved': reportData.approved, 'Pending Review': reportData.pending, 'Changes Requested/Rejected': reportData.rejected }
+      const base64 = await window.api.reports.generatePdf(activeTab, summaryPayload)
       const link = document.createElement('a')
       link.href = `data:application/pdf;base64,${base64}`
       link.download = `${activeTab}_report_${Date.now()}.pdf`
@@ -1721,6 +1781,7 @@ export function ReportsPage() {
               projectId={selectedProjectId}
               projects={projectsList}
               onEmailOpen={openEmailDialog}
+              onSelectProject={id => { setSelectedProjectId(id); setReportData(null) }}
             />
           ) : loading ? (
             <div className="flex items-center justify-center h-64">

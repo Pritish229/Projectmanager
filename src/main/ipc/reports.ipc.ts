@@ -312,12 +312,17 @@ export function registerReportHandlers(): void {
     const italicFont = await pdfDoc.embedFont(StandardFonts.HelveticaOblique)
 
     // Fetch user profile info from settings
-    const [userProfileName, userProfileEmail, userProfilePhone, userProfileCompany, userProfileRole] = await Promise.all([
+    const [userProfileName, userProfileEmail, userProfilePhone, userProfileCompany, userProfileRole, userCompanyGst] = await Promise.all([
       prisma.setting.findUnique({ where: { key: 'user_profile_name' } }).then(s => s?.value || ''),
       prisma.setting.findUnique({ where: { key: 'user_profile_email' } }).then(s => s?.value || ''),
       prisma.setting.findUnique({ where: { key: 'user_profile_phone' } }).then(s => s?.value || ''),
-      prisma.setting.findUnique({ where: { key: 'user_profile_company' } }).then(s => s?.value || ''),
-      prisma.setting.findUnique({ where: { key: 'user_profile_role' } }).then(s => s?.value || '')
+      prisma.setting.findUnique({ where: { key: 'company_name' } }).then(async s => {
+        if (s?.value) return s.value
+        const legacy = await prisma.setting.findUnique({ where: { key: 'user_profile_company' } })
+        return legacy?.value || ''
+      }),
+      prisma.setting.findUnique({ where: { key: 'user_profile_role' } }).then(s => s?.value || ''),
+      prisma.setting.findUnique({ where: { key: 'company_gst_no' } }).then(s => s?.value || '')
     ])
 
     const W = 595
@@ -431,7 +436,10 @@ export function registerReportHandlers(): void {
     drawText(`Generated: ${dateStr}`, MARGIN_LEFT, H - 50, 8.5, regularFont, rgb(0.92, 0.93, 0.98))
 
     const headerRightLabel = userProfileName ? `PREPARED BY: ${userProfileName.toUpperCase()}` : 'PROJECT WORKSPACE MANAGER'
-    const headerSubLabel = userProfileCompany ? userProfileCompany : (userProfileEmail || 'Workspace Manager')
+    const companyWithGst = userProfileCompany
+      ? (userCompanyGst ? `${userProfileCompany} (GSTIN: ${userCompanyGst})` : userProfileCompany)
+      : ''
+    const headerSubLabel = companyWithGst || (userProfileEmail ? `Contact: ${userProfileEmail}` : 'Workspace Manager')
 
     const r1 = truncateToWidth(headerRightLabel, 210, 8, boldFont)
     const r2 = truncateToWidth(headerSubLabel, 210, 8, regularFont)
@@ -719,7 +727,7 @@ export function registerReportHandlers(): void {
     // ── 7. FOOTER ──
     const totalPages = pdfDoc.getPageCount()
     const footerLeftStr = userProfileName
-      ? `Prepared by ${userProfileName}${userProfileEmail ? ` • ${userProfileEmail}` : ''}`
+      ? `Prepared by ${userProfileName}${userProfileEmail ? ` • ${userProfileEmail}` : ''}${userCompanyGst ? ` • GSTIN: ${userCompanyGst}` : ''}`
       : 'Project Workspace Manager — Confidential'
 
     pdfDoc.getPages().forEach((p, i) => {

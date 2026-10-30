@@ -10,12 +10,9 @@ import {
   FileBarChart,
   Settings,
   Database,
-  ChevronLeft,
-  ChevronRight,
   Zap,
   Lock,
-  PanelLeftClose,
-  PanelLeft
+  PanelLeftClose
 } from 'lucide-react'
 
 const navItems = [
@@ -108,8 +105,8 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Lock Application and Collapse Footer */}
-      <div className="p-3 border-t border-sidebar-border space-y-1">
+      {/* Lock Application Footer */}
+      <div className="p-3 border-t border-sidebar-border">
         <button
           onClick={logout}
           className={cn(
@@ -117,30 +114,11 @@ export function Sidebar() {
             'text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 hover:text-rose-700 dark:hover:text-rose-300',
             sidebarCollapsed && 'justify-center px-2'
           )}
-          title="Lock App"
+          title="Lock Workspace"
         >
           <Lock className="w-4 h-4 shrink-0" />
           {!sidebarCollapsed && (
             <span className="animate-fade-in truncate">Lock Workspace</span>
-          )}
-        </button>
-
-        <button
-          onClick={toggleSidebar}
-          className={cn(
-            'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-all cursor-pointer',
-            'text-muted-foreground hover:text-foreground hover:bg-muted',
-            sidebarCollapsed && 'justify-center px-2'
-          )}
-          title={sidebarCollapsed ? 'Expand Sidebar (Ctrl+B)' : 'Collapse Sidebar (Ctrl+B)'}
-        >
-          {sidebarCollapsed ? (
-            <PanelLeft className="w-4 h-4" />
-          ) : (
-            <>
-              <ChevronLeft className="w-4 h-4" />
-              <span className="animate-fade-in">Collapse Sidebar</span>
-            </>
           )}
         </button>
       </div>

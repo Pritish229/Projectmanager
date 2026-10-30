@@ -39,7 +39,14 @@ import {
   HardDrive,
   Check,
   User,
-  Receipt
+  Receipt,
+  Building2,
+  Briefcase,
+  Globe,
+  MapPin,
+  Phone,
+  AtSign,
+  FileText
 } from 'lucide-react'
 import { useInvoiceStore } from '@/stores/useInvoiceStore'
 import { InvoiceTemplateEditorModal } from '../components/InvoiceTemplateEditorModal'
@@ -130,32 +137,86 @@ export function SettingsPage() {
     }
   }, [activeTab, fetchTemplates, seedDefaultTemplates])
 
-  // User Profile Information State
+  // User Profile & Company Information State
   const [profileInfo, setProfileInfo] = useState({
     name: '',
     email: '',
     phone: '',
     company: '',
-    role: ''
+    role: '',
+    // Business & Company fields
+    businessType: 'freelancer' as 'freelancer' | 'company',
+    companyName: '',
+    gstNo: '',
+    panNo: '',
+    regNo: '',
+    companyEmail: '',
+    companyPhone: '',
+    website: '',
+    address: '',
+    city: '',
+    state: '',
+    pincode: '',
+    country: 'India',
+    businessNotes: ''
   })
   const [savingProfileInfo, setSavingProfileInfo] = useState(false)
+  const [showFreelancerCompanyFields, setShowFreelancerCompanyFields] = useState(false)
 
   const loadProfileInfo = async () => {
     try {
-      const [name, email, phone, company, role] = await Promise.all([
+      const [
+        name, email, phone, company, role,
+        bType, compName, gstNo, panNo, regNo, compEmail, compPhone, website, address, city, state, pincode, country, notes
+      ] = await Promise.all([
         window.api.settings.get('user_profile_name').catch(() => ''),
         window.api.settings.get('user_profile_email').catch(() => ''),
         window.api.settings.get('user_profile_phone').catch(() => ''),
         window.api.settings.get('user_profile_company').catch(() => ''),
-        window.api.settings.get('user_profile_role').catch(() => '')
+        window.api.settings.get('user_profile_role').catch(() => ''),
+        window.api.settings.get('company_business_type').catch(() => ''),
+        window.api.settings.get('company_name').catch(() => ''),
+        window.api.settings.get('company_gst_no').catch(() => ''),
+        window.api.settings.get('company_pan_no').catch(() => ''),
+        window.api.settings.get('company_reg_no').catch(() => ''),
+        window.api.settings.get('company_email').catch(() => ''),
+        window.api.settings.get('company_phone').catch(() => ''),
+        window.api.settings.get('company_website').catch(() => ''),
+        window.api.settings.get('company_address').catch(() => ''),
+        window.api.settings.get('company_city').catch(() => ''),
+        window.api.settings.get('company_state').catch(() => ''),
+        window.api.settings.get('company_pincode').catch(() => ''),
+        window.api.settings.get('company_country').catch(() => ''),
+        window.api.settings.get('company_notes').catch(() => '')
       ])
+
+      const initialCompName = compName || company || ''
+      const detectedType = (bType as 'freelancer' | 'company') || (gstNo || compName ? 'company' : 'freelancer')
+
       setProfileInfo({
         name: name || '',
         email: email || '',
         phone: phone || '',
-        company: company || '',
-        role: role || ''
+        company: initialCompName,
+        role: role || '',
+        businessType: detectedType,
+        companyName: initialCompName,
+        gstNo: gstNo || '',
+        panNo: panNo || '',
+        regNo: regNo || '',
+        companyEmail: compEmail || '',
+        companyPhone: compPhone || '',
+        website: website || '',
+        address: address || '',
+        city: city || '',
+        state: state || '',
+        pincode: pincode || '',
+        country: country || 'India',
+        businessNotes: notes || ''
       })
+      if (detectedType === 'freelancer' && (gstNo || compName || panNo || address)) {
+        setShowFreelancerCompanyFields(true)
+      }
     } catch (err) {
       console.error('Failed to load profile info:', err)
     }
@@ -164,16 +225,31 @@ export function SettingsPage() {
   const handleSaveProfileInfo = async () => {
     setSavingProfileInfo(true)
     try {
+      const effectiveCompany = profileInfo.companyName || profileInfo.company || ''
       await Promise.all([
         window.api.settings.set('user_profile_name', profileInfo.name),
         window.api.settings.set('user_profile_email', profileInfo.email),
         window.api.settings.set('user_profile_phone', profileInfo.phone),
-        window.api.settings.set('user_profile_company', profileInfo.company),
-        window.api.settings.set('user_profile_role', profileInfo.role)
+        window.api.settings.set('user_profile_company', effectiveCompany),
+        window.api.settings.set('user_profile_role', profileInfo.role),
+        window.api.settings.set('company_business_type', profileInfo.businessType),
+        window.api.settings.set('company_name', profileInfo.companyName),
+        window.api.settings.set('company_gst_no', profileInfo.gstNo),
+        window.api.settings.set('company_pan_no', profileInfo.panNo),
+        window.api.settings.set('company_reg_no', profileInfo.regNo),
+        window.api.settings.set('company_email', profileInfo.companyEmail),
+        window.api.settings.set('company_phone', profileInfo.companyPhone),
+        window.api.settings.set('company_website', profileInfo.website),
+        window.api.settings.set('company_address', profileInfo.address),
+        window.api.settings.set('company_city', profileInfo.city),
+        window.api.settings.set('company_state', profileInfo.state),
+        window.api.settings.set('company_pincode', profileInfo.pincode),
+        window.api.settings.set('company_country', profileInfo.country),
+        window.api.settings.set('company_notes', profileInfo.businessNotes)
       ])
-      toast.success('Profile information saved successfully!')
+      toast.success('Profile and company information saved successfully!')
     } catch (err: any) {
-      toast.error('Failed to save profile information')
+      toast.error('Failed to save profile and company information')
     } finally {
       setSavingProfileInfo(false)
     }
@@ -561,7 +637,7 @@ export function SettingsPage() {
   ]
 
   const navTabs = [
-    { id: 'profile' as SettingsTab, label: 'Profile Info', icon: User },
+    { id: 'profile' as SettingsTab, label: 'Profile & Company', icon: User },
     { id: 'invoices' as SettingsTab, label: 'Invoice Templates', icon: Receipt, badge: templates.length },
     { id: 'email' as SettingsTab, label: 'Email Accounts', icon: Mail, badge: smtpProfiles.length },
     { id: 'appearance' as SettingsTab, label: 'Appearance', icon: Sun },
@@ -829,18 +905,19 @@ export function SettingsPage() {
           </div>
         )}
 
-        {/* ─── TAB 0: PROFILE INFORMATION ─── */}
+        {/* ─── TAB 0: PROFILE & COMPANY INFORMATION ─── */}
         {activeTab === 'profile' && (
-          <div className="space-y-6 animate-fade-in">
+          <div className="space-y-6 animate-fade-in pb-8">
+            {/* 1. PERSONAL PROFILE CARD */}
             <section className="rounded-xl border bg-card p-6 shadow-sm space-y-6">
               <div className="flex items-center gap-3 border-b pb-4">
-                <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-500">
+                <div className="p-2.5 rounded-lg bg-indigo-500/10 text-indigo-500">
                   <User className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold">User Profile Information</h2>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    Your contact details will automatically be included in generated project PDF summary reports.
+                  <h2 className="text-lg font-bold">Personal Profile Details</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Your personal contact details used in signatures, notifications, and generated project summary reports.
                   </p>
                 </div>
               </div>
@@ -852,7 +929,7 @@ export function SettingsPage() {
                     type="text"
                     value={profileInfo.name}
                     onChange={(e) => setProfileInfo({ ...profileInfo, name: e.target.value })}
-                    placeholder="e.g. Chirag Patel"
+                    placeholder="e.g. John Doe"
                     className="w-full px-3.5 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
@@ -863,7 +940,7 @@ export function SettingsPage() {
                     type="email"
                     value={profileInfo.email}
                     onChange={(e) => setProfileInfo({ ...profileInfo, email: e.target.value })}
-                    placeholder="e.g. chirag@example.com"
+                    placeholder="e.g. john@example.com"
                     className="w-full px-3.5 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
@@ -880,36 +957,325 @@ export function SettingsPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-foreground mb-1.5 block">Company / Organization</label>
-                  <input
-                    type="text"
-                    value={profileInfo.company}
-                    onChange={(e) => setProfileInfo({ ...profileInfo, company: e.target.value })}
-                    placeholder="e.g. Acme Studio Inc."
-                    className="w-full px-3.5 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="text-xs font-semibold text-foreground mb-1.5 block">Job Title / Role</label>
+                  <label className="text-xs font-semibold text-foreground mb-1.5 block">Job Title / Designation</label>
                   <input
                     type="text"
                     value={profileInfo.role}
                     onChange={(e) => setProfileInfo({ ...profileInfo, role: e.target.value })}
-                    placeholder="e.g. Senior Project Manager & Lead Developer"
+                    placeholder="e.g. Senior Project Manager & Lead Designer"
                     className="w-full px-3.5 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
               </div>
+            </section>
 
-              <div className="flex justify-end pt-2 border-t">
+            {/* 2. COMPANY / BUSINESS & GST DETAILS CARD */}
+            <section className="rounded-xl border bg-card p-6 shadow-sm space-y-6">
+              <div className="flex items-center justify-between border-b pb-4 flex-wrap gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-500">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-bold">Company & Business Details</h2>
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground border">
+                        Optional
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Configure your company name, GST No., and official details. If you are a freelancer, these details are completely optional.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Entity Type Selector */}
+              <div>
+                <label className="text-xs font-semibold text-foreground mb-2 block">
+                  Select Your Business Type / Mode:
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div
+                    onClick={() => {
+                      setProfileInfo({ ...profileInfo, businessType: 'freelancer' })
+                    }}
+                    className={cn(
+                      'p-4 rounded-xl border-2 transition-all cursor-pointer flex items-start gap-3',
+                      profileInfo.businessType === 'freelancer'
+                        ? 'border-primary bg-primary/5 text-foreground shadow-xs'
+                        : 'border-border hover:border-border/80 hover:bg-muted/40 text-muted-foreground'
+                    )}
+                  >
+                    <div className={cn(
+                      'p-2 rounded-lg shrink-0 mt-0.5',
+                      profileInfo.businessType === 'freelancer' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                    )}>
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-sm text-foreground">Freelancer / Individual</span>
+                        {profileInfo.businessType === 'freelancer' && (
+                          <span className="text-xs font-bold text-primary flex items-center gap-1">
+                            <Check className="w-3.5 h-3.5" /> Selected
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                        Working as an independent contractor or freelancer. <strong>No company registration or GST No. needed.</strong>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => {
+                      setProfileInfo({ ...profileInfo, businessType: 'company' })
+                      setShowFreelancerCompanyFields(true)
+                    }}
+                    className={cn(
+                      'p-4 rounded-xl border-2 transition-all cursor-pointer flex items-start gap-3',
+                      profileInfo.businessType === 'company'
+                        ? 'border-primary bg-primary/5 text-foreground shadow-xs'
+                        : 'border-border hover:border-border/80 hover:bg-muted/40 text-muted-foreground'
+                    )}
+                  >
+                    <div className={cn(
+                      'p-2 rounded-lg shrink-0 mt-0.5',
+                      profileInfo.businessType === 'company' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                    )}>
+                      <Building2 className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-sm text-foreground">Registered Company / Agency</span>
+                        {profileInfo.businessType === 'company' && (
+                          <span className="text-xs font-bold text-primary flex items-center gap-1">
+                            <Check className="w-3.5 h-3.5" /> Selected
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                        Agency, studio, Pvt Ltd, LLP, or partnership firm. Enables GSTIN, PAN, and corporate address on invoices & reports.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Freelancer Mode Banner */}
+              {profileInfo.businessType === 'freelancer' && (
+                <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 flex items-start gap-3">
+                  <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                  <div className="flex-1 text-xs space-y-1">
+                    <p className="font-semibold text-blue-700 dark:text-blue-300">
+                      Freelancer mode active — No company details or GST number required
+                    </p>
+                    <p className="text-muted-foreground">
+                      Reports and workspace outputs will use your personal profile name (<strong>{profileInfo.name || 'Your Name'}</strong>). If you have an optional brand name or GSTIN you wish to include, you can toggle optional fields below.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowFreelancerCompanyFields(!showFreelancerCompanyFields)}
+                      className="text-primary hover:underline font-semibold mt-1 inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      {showFreelancerCompanyFields ? '▲ Hide optional business fields' : '▼ Click here to show optional company & GST fields'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Company / Business Form Fields */}
+              {(profileInfo.businessType === 'company' || showFreelancerCompanyFields) && (
+                <div className="space-y-4 pt-2 border-t">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-semibold text-foreground mb-1.5 flex items-center justify-between">
+                        <span>Company / Business Name {profileInfo.businessType === 'company' && <span className="text-rose-500">*</span>}</span>
+                        {profileInfo.businessType === 'freelancer' && <span className="text-[10px] text-muted-foreground font-normal">(Optional Brand/Trade Name)</span>}
+                      </label>
+                      <input
+                        type="text"
+                        value={profileInfo.companyName}
+                        onChange={(e) => setProfileInfo({ ...profileInfo, companyName: e.target.value, company: e.target.value })}
+                        placeholder={profileInfo.businessType === 'freelancer' ? 'e.g. Studio Craft (Optional)' : 'e.g. Acme Technologies Pvt. Ltd.'}
+                        className="w-full px-3.5 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-foreground mb-1.5 flex items-center justify-between">
+                        <span>GST Identification Number (GSTIN)</span>
+                        <span className="text-[10px] text-muted-foreground font-normal">
+                          {profileInfo.businessType === 'freelancer' ? 'Optional (No need for freelancers)' : '15-character GSTIN'}
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        value={profileInfo.gstNo}
+                        onChange={(e) => setProfileInfo({ ...profileInfo, gstNo: e.target.value.toUpperCase() })}
+                        placeholder="e.g. 27AABCU9603R1ZM"
+                        maxLength={15}
+                        className="w-full px-3.5 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-1 focus:ring-primary uppercase tracking-wide font-mono text-xs"
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        {profileInfo.businessType === 'freelancer'
+                          ? 'Leave blank if not registered for GST.'
+                          : 'Valid Indian GSTIN format: State code (2 digits) + PAN (10 chars) + Entity # (1) + Z + Checksum.'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-foreground mb-1.5 flex items-center justify-between">
+                        <span>PAN Number (Optional)</span>
+                        <span className="text-[10px] text-muted-foreground font-normal">Permanent Account Number</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={profileInfo.panNo}
+                        onChange={(e) => setProfileInfo({ ...profileInfo, panNo: e.target.value.toUpperCase() })}
+                        placeholder="e.g. ABCDE1234F"
+                        maxLength={10}
+                        className="w-full px-3.5 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-1 focus:ring-primary uppercase font-mono text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-foreground mb-1.5 block">
+                        Company Registration / CIN / MSME (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={profileInfo.regNo}
+                        onChange={(e) => setProfileInfo({ ...profileInfo, regNo: e.target.value })}
+                        placeholder="e.g. U72200MH2021PTC123456 or UDYAM-XX-00-0000000"
+                        className="w-full px-3.5 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-foreground mb-1.5 block">
+                        Official Business Email (Optional)
+                      </label>
+                      <input
+                        type="email"
+                        value={profileInfo.companyEmail}
+                        onChange={(e) => setProfileInfo({ ...profileInfo, companyEmail: e.target.value })}
+                        placeholder="e.g. billing@company.com"
+                        className="w-full px-3.5 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-foreground mb-1.5 block">
+                        Official Business Phone (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={profileInfo.companyPhone}
+                        onChange={(e) => setProfileInfo({ ...profileInfo, companyPhone: e.target.value })}
+                        placeholder="e.g. +91 22 2847 0000"
+                        className="w-full px-3.5 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="text-xs font-semibold text-foreground mb-1.5 block">
+                        Company Website URL (Optional)
+                      </label>
+                      <input
+                        type="url"
+                        value={profileInfo.website}
+                        onChange={(e) => setProfileInfo({ ...profileInfo, website: e.target.value })}
+                        placeholder="e.g. https://www.yourcompany.com"
+                        className="w-full px-3.5 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="text-xs font-semibold text-foreground mb-1.5 block">
+                        Registered Business Address (Optional)
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={profileInfo.address}
+                        onChange={(e) => setProfileInfo({ ...profileInfo, address: e.target.value })}
+                        placeholder="Building name, Floor/Suite, Street, Industrial Area..."
+                        className="w-full px-3.5 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-1 focus:ring-primary resize-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:col-span-2">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1 block">City</label>
+                        <input
+                          type="text"
+                          value={profileInfo.city}
+                          onChange={(e) => setProfileInfo({ ...profileInfo, city: e.target.value })}
+                          placeholder="e.g. Mumbai"
+                          className="w-full px-3 py-1.5 rounded-lg border bg-background text-xs outline-none focus:ring-1 focus:ring-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1 block">State / Province</label>
+                        <input
+                          type="text"
+                          value={profileInfo.state}
+                          onChange={(e) => setProfileInfo({ ...profileInfo, state: e.target.value })}
+                          placeholder="e.g. Maharashtra"
+                          className="w-full px-3 py-1.5 rounded-lg border bg-background text-xs outline-none focus:ring-1 focus:ring-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1 block">PIN / Postal Code</label>
+                        <input
+                          type="text"
+                          value={profileInfo.pincode}
+                          onChange={(e) => setProfileInfo({ ...profileInfo, pincode: e.target.value })}
+                          placeholder="e.g. 400001"
+                          className="w-full px-3 py-1.5 rounded-lg border bg-background text-xs outline-none focus:ring-1 focus:ring-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1 block">Country</label>
+                        <input
+                          type="text"
+                          value={profileInfo.country}
+                          onChange={(e) => setProfileInfo({ ...profileInfo, country: e.target.value })}
+                          placeholder="e.g. India"
+                          className="w-full px-3 py-1.5 rounded-lg border bg-background text-xs outline-none focus:ring-1 focus:ring-primary"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="text-xs font-semibold text-foreground mb-1.5 block">
+                        Business Tagline or Notes (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={profileInfo.businessNotes}
+                        onChange={(e) => setProfileInfo({ ...profileInfo, businessNotes: e.target.value })}
+                        placeholder="e.g. Full-Cycle Digital Product Engineering & Cloud Solutions"
+                        className="w-full px-3.5 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SAVE BUTTON */}
+              <div className="flex items-center justify-between pt-4 border-t flex-wrap gap-3">
+                <p className="text-xs text-muted-foreground">
+                  Saved settings are used automatically in reports, invoice templates, and emails.
+                </p>
                 <button
                   onClick={handleSaveProfileInfo}
                   disabled={savingProfileInfo}
-                  className="flex items-center gap-2 px-5 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                  className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
                 >
                   {savingProfileInfo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  Save Profile Information
+                  Save Profile & Company Details
                 </button>
               </div>
             </section>

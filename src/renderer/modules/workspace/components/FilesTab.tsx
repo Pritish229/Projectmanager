@@ -88,6 +88,7 @@ export function FilesTab({ projectId, isReadOnly = false }: FilesTabProps) {
   const [isDragActive, setIsDragActive] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const itemRefs = useRef<Map<string, HTMLElement>>(new Map())
+  const lastPastedTimeRef = useRef<number>(0)
 
   const loadData = useCallback(async () => {
     setLoading(true); setError(null)
@@ -441,6 +442,189 @@ export function FilesTab({ projectId, isReadOnly = false }: FilesTabProps) {
     }
   }
 
+  // Automatic Clipboard Paste for Screenshots and Copied Images (Ctrl + V)
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      if (isReadOnly) return
+
+      const target = e.target as HTMLElement | null
+      const isInput = target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      )
+
+      const clipboardFiles = e.clipboardData?.files
+      const items = e.clipboardData?.items
+
+      // If user is inside an input field and pasting plain text without files, don't hijack
+      if (isInput) {
+        const text = e.clipboardData?.getData('text/plain')
+        const hasImage = (items && Array.from(items).some(it => it.type.startsWith('image/'))) ||
+                         (clipboardFiles && clipboardFiles.length > 0)
+        if (text && !hasImage) return
+      }
+
+      let handled = false
+
+      // 1. Check for files or images in event clipboardData
+      if (clipboardFiles && clipboardFiles.length > 0) {
+        const diskPaths: string[] = []
+        const memoryFiles: { name: string; buffer: ArrayBuffer; mimeType: string }[] = []
+
+        for (let i = 0; i < clipboardFiles.length; i++) {
+          const f = clipboardFiles[i]
+          const p = (window.api?.files?.getPathForFile ? window.api.files.getPathForFile(f) : (f as any).path) || ''
+          if (p) {
+            diskPaths.push(p)
+          } else if (f.type.startsWith('image/') || f.size > 0) {
+            const buf = await f.arrayBuffer()
+            const ext = f.name && f.name.includes('.') ? '' : (f.type.includes('png') ? '.png' : f.type.includes('jpeg') || f.type.includes('jpg') ? '.jpg' : '.png')
+            const name = f.name && f.name !== 'image.png' ? f.name : `Screenshot_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}${ext}`
+            memoryFiles.push({
+              name,
+              buffer: buf,
+              mimeType: f.type || 'image/png'
+            })
+          }
+        }
+
+        if (diskPaths.length > 0) {
+          e.preventDefault()
+          handled = true
+          lastPastedTimeRef.current = Date.now()
+          setUploading(true)
+          try {
+            const newFiles = await window.api.files.uploadPaths(projectId, diskPaths)
+            if (newFiles?.length > 0) {
+              if (activeFolderId) {
+                await window.api.files.bulkMoveToFolder(newFiles.map((f: ProjectFile) => f.id), activeFolderId)
+              }
+              await loadData()
+              toast.success(`${newFiles.length} file(s) pasted and uploaded successfully.`)
+            }
+          } catch (err) {
+            console.error('Failed to upload pasted disk files:', err)
+            toast.error('Failed to upload pasted file.')
+          } finally {
+            setUploading(false)
+          }
+        }
+
+        if (memoryFiles.length > 0) {
+          e.preventDefault()
+          handled = true
+          lastPastedTimeRef.current = Date.now()
+          setUploading(true)
+          try {
+            let uploadedCount = 0
+            for (const item of memoryFiles) {
+              const res = await window.api.files.uploadBuffer(projectId, {
+                buffer: item.buffer,
+                originalName: item.name,
+                mimeType: item.mimeType,
+                folderId: activeFolderId
+              })
+              if (res) uploadedCount++
+            }
+            if (uploadedCount > 0) {
+              await loadData()
+              toast.success(`${uploadedCount} image(s) pasted from clipboard and uploaded successfully!`)
+            }
+          } catch (err) {
+            console.error('Failed to upload memory files:', err)
+            toast.error('Failed to upload pasted image.')
+          } finally {
+            setUploading(false)
+          }
+        }
+      } else if (items && items.length > 0) {
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i]
+          if (item.type.startsWith('image/')) {
+            const blob = item.getAsFile()
+            if (blob) {
+              e.preventDefault()
+              handled = true
+              lastPastedTimeRef.current = Date.now()
+              setUploading(true)
+              try {
+                const buf = await blob.arrayBuffer()
+                const ext = item.type.includes('jpeg') || item.type.includes('jpg') ? '.jpg' : item.type.includes('webp') ? '.webp' : '.png'
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+                const name = `Screenshot_${timestamp}${ext}`
+                const res = await window.api.files.uploadBuffer(projectId, {
+                  buffer: buf,
+                  originalName: name,
+                  mimeType: item.type,
+                  folderId: activeFolderId
+                })
+                if (res) {
+                  await loadData()
+                  toast.success(`Screenshot pasted and uploaded successfully!`)
+                }
+              } catch (err) {
+                console.error('Failed to upload pasted image item:', err)
+                toast.error('Failed to upload pasted image.')
+              } finally {
+                setUploading(false)
+              }
+              break
+            }
+          }
+        }
+      }
+
+      // 2. Fallback to native system clipboard image (Windows screenshot, Snipping Tool, Copied Web Image)
+      if (!handled && window.api?.files?.uploadClipboardImage) {
+        try {
+          const res = await window.api.files.uploadClipboardImage(projectId, activeFolderId)
+          if (res) {
+            e.preventDefault()
+            lastPastedTimeRef.current = Date.now()
+            await loadData()
+            toast.success(`Screenshot from clipboard uploaded successfully!`)
+          }
+        } catch {
+          // No image in clipboard, safe to ignore
+        }
+      }
+    }
+
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+        const target = e.target as HTMLElement | null
+        const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+        if (isInput) return
+
+        if (isReadOnly) return
+
+        // Delay slightly to let paste event fire first if available
+        setTimeout(async () => {
+          if (Date.now() - lastPastedTimeRef.current < 600) return
+          if (!window.api?.files?.uploadClipboardImage) return
+          try {
+            const res = await window.api.files.uploadClipboardImage(projectId, activeFolderId)
+            if (res) {
+              lastPastedTimeRef.current = Date.now()
+              await loadData()
+              toast.success(`Screenshot from clipboard uploaded successfully!`)
+            }
+          } catch {
+            // Ignore if no image
+          }
+        }, 120)
+      }
+    }
+
+    window.addEventListener('paste', handlePaste)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('paste', handlePaste)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [projectId, activeFolderId, isReadOnly, loadData])
+
   const openProperties = (target: PropertiesTarget) => { setPropertiesTarget(target); setContextMenu(null) }
   const getPropertiesContent = () => {
     if (!propertiesTarget) return null
@@ -473,6 +657,12 @@ export function FilesTab({ projectId, isReadOnly = false }: FilesTabProps) {
             <button onClick={() => setViewMode('grid')} title="Grid View" className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}><LayoutGrid className="w-4 h-4" /></button>
             <button onClick={() => setViewMode('list')} title="List View" className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}><List className="w-4 h-4" /></button>
           </div>
+          {!isReadOnly && (
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-muted-foreground bg-muted/60 border rounded-lg select-none" title="Copy screenshot or web image, then press Ctrl+V to upload instantly">
+              <kbd className="px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-background border rounded shadow-2xs">Ctrl + V</kbd>
+              <span>Paste Screenshot</span>
+            </div>
+          )}
           {!isReadOnly && <button onClick={() => setCreateFolderOpen(true)} className="flex items-center gap-2 px-3 py-2 border border-dashed rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:border-solid hover:bg-muted transition-all cursor-pointer"><FolderPlus className="w-4 h-4" /> New Folder</button>}
           {!isReadOnly && <button onClick={handleUpload} disabled={uploading} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm cursor-pointer disabled:opacity-50">{uploading ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</> : <><Upload className="w-4 h-4" /> Upload Files</>}</button>}
         </div>
@@ -538,7 +728,7 @@ export function FilesTab({ projectId, isReadOnly = false }: FilesTabProps) {
         {filteredFolders.length === 0 && filteredFiles.length === 0 ? (
           <EmptyState icon={activeFolderId ? FolderOpen : File}
             title={searchTerm ? 'No items match your search' : activeFolderId ? 'This folder is empty' : 'No files uploaded yet'}
-            description={searchTerm ? 'Try adjusting your search query.' : activeFolderId ? 'Upload files here or move files into this folder.' : 'Upload files or create folders to organise your project assets.'}
+            description={searchTerm ? 'Try adjusting your search query.' : activeFolderId ? 'Upload files here or press Ctrl+V to paste screenshots.' : 'Upload files, drag & drop, or press Ctrl+V to paste screenshots directly from your clipboard.'}
             action={!isReadOnly ? (<div className="flex gap-2"><button onClick={handleUpload} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors cursor-pointer">Upload Files</button>{!activeFolderId && <button onClick={() => setCreateFolderOpen(true)} className="px-4 py-2 border rounded-lg text-sm font-medium hover:bg-muted transition-colors cursor-pointer">Create Folder</button>}</div>) : undefined}
           />
         ) : viewMode === 'grid' ? (

@@ -1,9 +1,8 @@
-import { ipcMain, dialog, app, shell } from 'electron'
+import { ipcMain, dialog, app, shell, clipboard } from 'electron'
 import { getPrisma } from '../database'
-import { copyFileSync, existsSync, mkdirSync, unlinkSync, renameSync, readFileSync } from 'fs'
+import { copyFileSync, existsSync, mkdirSync, unlinkSync, renameSync, readFileSync, writeFileSync, statSync } from 'fs'
 import { join, basename, extname } from 'path'
 import { v4 as uuidv4 } from 'uuid'
-import { statSync } from 'fs'
 
 function getStoragePath(projectId: string): string {
   const isDev = !app.isPackaged
@@ -135,6 +134,100 @@ export function registerFileHandlers(): void {
     }
 
     return uploadedFiles
+  })
+
+  // Upload screenshot or image directly from system clipboard
+  ipcMain.handle('files:uploadClipboardImage', async (_, projectId: string, folderId?: string | null) => {
+    const nativeImg = clipboard.readImage()
+    if (!nativeImg || nativeImg.isEmpty()) return null
+
+    const pngBuffer = nativeImg.toPNG()
+    if (!pngBuffer || pngBuffer.length === 0) return null
+
+    const storagePath = getStoragePath(projectId)
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
+    const originalName = `Screenshot_${timestamp}.png`
+    const uniqueName = `${uuidv4()}.png`
+    const destPath = join(storagePath, uniqueName)
+
+    writeFileSync(destPath, pngBuffer)
+    const stats = statSync(destPath)
+
+    const file = await prisma.projectFile.create({
+      data: {
+        projectId,
+        folderId: folderId || null,
+        name: uniqueName,
+        originalName,
+        path: destPath,
+        mimeType: 'image/png',
+        size: stats.size
+      }
+    })
+
+    const user = await prisma.user.findFirst()
+    await prisma.activityLog.create({
+      data: {
+        projectId,
+        action: 'files_uploaded',
+        entity: 'file',
+        entityId: file.id,
+        message: `Pasted screenshot '${originalName}' uploaded`,
+        userId: user?.id
+      }
+    })
+
+    return file
+  })
+
+  // Upload file or image from buffer / array buffer
+  ipcMain.handle('files:uploadBuffer', async (_, projectId: string, data: { buffer: ArrayBuffer | Uint8Array; originalName: string; mimeType: string; folderId?: string | null }) => {
+    if (!data || !data.buffer) return null
+
+    const storagePath = getStoragePath(projectId)
+    let ext = extname(data.originalName || '')
+    if (!ext) {
+      if (data.mimeType?.includes('png')) ext = '.png'
+      else if (data.mimeType?.includes('jpeg') || data.mimeType?.includes('jpg')) ext = '.jpg'
+      else if (data.mimeType?.includes('webp')) ext = '.webp'
+      else if (data.mimeType?.includes('gif')) ext = '.gif'
+      else ext = '.bin'
+    }
+
+    const uniqueName = `${uuidv4()}${ext}`
+    const destPath = join(storagePath, uniqueName)
+
+    const nodeBuffer = Buffer.isBuffer(data.buffer) ? data.buffer : Buffer.from(data.buffer)
+    writeFileSync(destPath, nodeBuffer)
+    const stats = statSync(destPath)
+
+    const file = await prisma.projectFile.create({
+      data: {
+        projectId,
+        folderId: data.folderId || null,
+        name: uniqueName,
+        originalName: data.originalName || `Pasted_File${ext}`,
+        path: destPath,
+        mimeType: data.mimeType || getMimeType(ext),
+        size: stats.size
+      }
+    })
+
+    const user = await prisma.user.findFirst()
+    await prisma.activityLog.create({
+      data: {
+        projectId,
+        action: 'files_uploaded',
+        entity: 'file',
+        entityId: file.id,
+        message: `Pasted file '${file.originalName}' uploaded`,
+        userId: user?.id
+      }
+    })
+
+    return file
   })
 
   // Download file

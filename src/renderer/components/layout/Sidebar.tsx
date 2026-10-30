@@ -11,8 +11,7 @@ import {
   Settings,
   Database,
   Zap,
-  Lock,
-  PanelLeftClose
+  Lock
 } from 'lucide-react'
 
 const navItems = [
@@ -61,16 +60,6 @@ export function Sidebar() {
             </div>
           )}
         </div>
-
-        {!sidebarCollapsed && (
-          <button
-            onClick={toggleSidebar}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
-            title="Collapse Sidebar (Ctrl+B)"
-          >
-            <PanelLeftClose className="w-4 h-4" />
-          </button>
-        )}
       </div>
 
       {/* Navigation */}

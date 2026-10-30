@@ -253,7 +253,13 @@ export function NotesTab({ projectId, isReadOnly }: NotesTabProps) {
   }, [projectId])
 
   useEffect(() => {
-    if (notes.length > 0 && !activeNoteId) setActiveNoteId(notes[0].id)
+    const targetNoteId = sessionStorage.getItem('workspace:target-note-id')
+    if (targetNoteId && notes.some(n => n.id === targetNoteId)) {
+      setActiveNoteId(targetNoteId)
+      sessionStorage.removeItem('workspace:target-note-id')
+    } else if (notes.length > 0 && !activeNoteId) {
+      setActiveNoteId(notes[0].id)
+    }
   }, [notes, activeNoteId])
 
   // Merge notes with local metadata

@@ -65,11 +65,11 @@
   --ring: 243 75% 59%;
 
   /* Sidebar */
-  --sidebar: 230 25% 12%;
-  --sidebar-foreground: 220 20% 82%;
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 224 71% 4%;
   --sidebar-accent: 243 75% 59%;
   --sidebar-accent-foreground: 0 0% 100%;
-  --sidebar-border: 230 20% 18%;
+  --sidebar-border: 220 13% 91%;
 }
 
 .dark {

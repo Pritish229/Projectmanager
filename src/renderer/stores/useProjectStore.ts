@@ -1,6 +1,23 @@
 import { create } from 'zustand'
 import { toast } from './useToastStore'
 
+export interface ProjectCollaborator {
+  id: string
+  projectId: string
+  clientId: string
+  role: string
+  createdAt: string
+  client: {
+    id: string
+    name: string
+    company: string
+    email: string
+    phone: string
+    status?: string
+    gstNo?: string
+  }
+}
+
 export interface Project {
   id: string
   name: string
@@ -24,6 +41,7 @@ export interface Project {
     phone: string
     status?: string
   } | null
+  collaborators?: ProjectCollaborator[]
   todos?: unknown[]
   deliverables?: unknown[]
   notes?: unknown[]
@@ -55,6 +73,9 @@ interface ProjectState {
   unarchiveProject: (id: string) => Promise<void>
   closeProject: (id: string) => Promise<void>
   reopenProject: (id: string) => Promise<void>
+  addCollaborator: (projectId: string, clientId: string, role?: string) => Promise<void>
+  removeCollaborator: (projectId: string, clientId: string) => Promise<void>
+  updateCollaboratorRole: (projectId: string, clientId: string, role: string) => Promise<void>
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -173,6 +194,42 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       toast.success('Project reopened successfully.')
     } catch (err) {
       toast.error('Failed to reopen project', (err as Error).message)
+      throw err
+    }
+  },
+
+  addCollaborator: async (projectId, clientId, role) => {
+    try {
+      await window.api.projects.addCollaborator(projectId, clientId, role)
+      await get().fetchProject(projectId)
+      await get().fetchProjects()
+      toast.success('Collaborator added to project.')
+    } catch (err) {
+      toast.error('Failed to add collaborator', (err as Error).message)
+      throw err
+    }
+  },
+
+  removeCollaborator: async (projectId, clientId) => {
+    try {
+      await window.api.projects.removeCollaborator(projectId, clientId)
+      await get().fetchProject(projectId)
+      await get().fetchProjects()
+      toast.success('Collaborator removed.')
+    } catch (err) {
+      toast.error('Failed to remove collaborator', (err as Error).message)
+      throw err
+    }
+  },
+
+  updateCollaboratorRole: async (projectId, clientId, role) => {
+    try {
+      await window.api.projects.updateCollaboratorRole(projectId, clientId, role)
+      await get().fetchProject(projectId)
+      await get().fetchProjects()
+      toast.success('Collaborator role updated.')
+    } catch (err) {
+      toast.error('Failed to update collaborator role', (err as Error).message)
       throw err
     }
   }

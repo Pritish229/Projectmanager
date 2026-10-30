@@ -8,11 +8,13 @@ import {
   Bell,
   Sun,
   Moon,
-  Monitor
+  Monitor,
+  PanelLeft,
+  PanelLeftClose
 } from 'lucide-react'
 
 export function Navbar() {
-  const { theme, setTheme, globalSearch, setGlobalSearch } = useUIStore()
+  const { theme, setTheme, globalSearch, setGlobalSearch, sidebarCollapsed, toggleSidebar } = useUIStore()
   const { unreadCount, fetchUnreadCount } = useNotificationStore()
   const navigate = useNavigate()
   const [searchFocused, setSearchFocused] = useState(false)
@@ -33,8 +35,16 @@ export function Navbar() {
 
   return (
     <header className="h-14 flex items-center justify-between px-6 border-b border-border bg-card/80 backdrop-blur-sm">
-      {/* Global Search */}
-      <div className="flex items-center flex-1 max-w-xl">
+      {/* Left: Sidebar Toggle + Global Search */}
+      <div className="flex items-center flex-1 max-w-xl gap-2">
+        <button
+          onClick={toggleSidebar}
+          className="flex items-center justify-center w-9 h-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer shrink-0"
+          title={sidebarCollapsed ? 'Expand Sidebar (Ctrl+B)' : 'Collapse Sidebar (Ctrl+B)'}
+        >
+          {sidebarCollapsed ? <PanelLeft className="w-[18px] h-[18px]" /> : <PanelLeftClose className="w-[18px] h-[18px]" />}
+        </button>
+
         <div className={cn(
           'flex items-center w-full gap-2 px-3 py-2 rounded-lg border transition-all duration-200',
           searchFocused

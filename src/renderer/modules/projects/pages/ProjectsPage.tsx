@@ -24,7 +24,8 @@ import {
   X,
   Calendar,
   Building2,
-  Filter
+  Filter,
+  Users
 } from 'lucide-react'
 
 export function ProjectsPage() {
@@ -324,6 +325,15 @@ export function ProjectsPage() {
                       )}>
                         {project.client.status}
                       </span>
+                    </span>
+                  )}
+                  {project.collaborators && project.collaborators.length > 0 && (
+                    <span
+                      className="flex items-center gap-1 text-[11px] text-indigo-600 dark:text-indigo-400 font-medium bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full"
+                      title={`Collaborating Clients: ${project.collaborators.map(c => `${c.client?.name || 'Client'} (${c.role})`).join(', ')}`}
+                    >
+                      <Users className="w-3 h-3" />
+                      <span>+{project.collaborators.length} Client Partner{project.collaborators.length > 1 ? 's' : ''}</span>
                     </span>
                   )}
                   {project.deadline && (

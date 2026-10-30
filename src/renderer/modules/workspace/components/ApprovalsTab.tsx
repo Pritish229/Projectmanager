@@ -1,18 +1,323 @@
-import { useEffect, useState, useMemo } from 'react'
-import { useDeliverableStore, type Deliverable } from '@/stores/useDeliverableStore'
+import { useEffect, useState, useMemo, useRef } from 'react'
+import { useDeliverableStore } from '@/stores/useDeliverableStore'
 import { useApprovalStore } from '@/stores/useApprovalStore'
 import { useProjectStore } from '@/stores/useProjectStore'
-import { StatusBadge, ConfirmDialog, EmptyState } from '@/components/shared'
+import { StatusBadge, EmptyState } from '@/components/shared'
 import { cn, formatDateTime, getFileList } from '@/lib/utils'
 import {
   CheckSquare, X, RefreshCw, Send, AlertTriangle, CheckCircle2,
   XCircle, MessageSquare, Clock, ArrowRight, CornerDownRight, History,
-  Download, FileText, FileSpreadsheet, Image, File, Pencil, Plus
+  Download, FileText, FileSpreadsheet, Image, File, Pencil, Plus,
+  Paperclip, ExternalLink, Eye, StickyNote, Trash2, Pin
 } from 'lucide-react'
 
 interface ApprovalsTabProps {
   projectId: string
   isReadOnly: boolean
+}
+
+interface PinnedResource {
+  id: string
+  type: 'file' | 'note'
+  refId: string
+  name: string
+}
+
+// ─── Component for Comment Input with File & Note Pinging ────────────────────────
+function CommentInputWithPings({
+  value,
+  onChange,
+  placeholder,
+  projectFiles,
+  projectNotes,
+  minRows = 3,
+  disabled = false
+}: {
+  value: string
+  onChange: (val: string) => void
+  placeholder?: string
+  projectFiles: any[]
+  projectNotes: any[]
+  minRows?: number
+  disabled?: boolean
+}) {
+  const [showPicker, setShowPicker] = useState<'file' | 'note' | null>(null)
+  const [pickerSearch, setPickerSearch] = useState('')
+  const [autocomplete, setAutocomplete] = useState<{
+    visible: boolean
+    query: string
+    cursor: number
+  }>({ visible: false, query: '', cursor: 0 })
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value
+    const pos = e.target.selectionStart || 0
+    onChange(val)
+
+    // Check if user just typed @ or [
+    const textBefore = val.slice(0, pos)
+    const match = textBefore.match(/(?:@|\[)([^@\[\s]*)$/)
+    if (match) {
+      setAutocomplete({
+        visible: true,
+        query: match[1].toLowerCase(),
+        cursor: pos
+      })
+    } else {
+      setAutocomplete({ visible: false, query: '', cursor: 0 })
+    }
+  }
+
+  const insertPing = (type: 'file' | 'note', id: string, name: string) => {
+    const cleanName = name.replace(/[\[\]@:]/g, '').trim()
+    const tag = `@[${type}:${id}:${cleanName}] `
+
+    if (autocomplete.visible) {
+      const textBefore = value.slice(0, autocomplete.cursor)
+      const triggerIdx = Math.max(textBefore.lastIndexOf('@'), textBefore.lastIndexOf('['))
+      const after = value.slice(autocomplete.cursor)
+      const start = triggerIdx !== -1 ? textBefore.slice(0, triggerIdx) : textBefore
+      onChange(`${start}${tag}${after}`)
+      setAutocomplete({ visible: false, query: '', cursor: 0 })
+    } else {
+      const textarea = textareaRef.current
+      const pos = textarea ? textarea.selectionStart : value.length
+      const before = value.slice(0, pos)
+      const after = value.slice(pos)
+      onChange(`${before}${tag}${after}`)
+    }
+    setShowPicker(null)
+    setPickerSearch('')
+    setTimeout(() => textareaRef.current?.focus(), 50)
+  }
+
+  // Filtered lists for picker & autocomplete
+  const filteredFiles = useMemo(() => {
+    const q = (showPicker ? pickerSearch : autocomplete.query).toLowerCase()
+    return projectFiles.filter(f => (f.originalName || f.name || '').toLowerCase().includes(q))
+  }, [projectFiles, showPicker, pickerSearch, autocomplete.query])
+
+  const filteredNotes = useMemo(() => {
+    const q = (showPicker ? pickerSearch : autocomplete.query).toLowerCase()
+    return projectNotes.filter(n => (n.title || '').toLowerCase().includes(q))
+  }, [projectNotes, showPicker, pickerSearch, autocomplete.query])
+
+  return (
+    <div className="relative flex flex-col space-y-1.5">
+      {/* Textarea */}
+      <div className="relative">
+        <textarea
+          ref={textareaRef}
+          rows={minRows}
+          value={value}
+          disabled={disabled}
+          onChange={handleTextChange}
+          placeholder={placeholder || 'Enter comment... Use @ or [ to ping files & notes'}
+          className="w-full px-3 py-2 rounded-lg border bg-background text-xs outline-none focus:border-primary transition-all resize-none shadow-xs text-foreground placeholder:text-muted-foreground/60"
+        />
+
+        {/* Floating Autocomplete Dropdown */}
+        {autocomplete.visible && (filteredFiles.length > 0 || filteredNotes.length > 0) && (
+          <div className="absolute left-2 bottom-full mb-1 w-64 max-h-48 overflow-y-auto bg-card rounded-xl border shadow-xl z-50 p-1 animate-scale-in text-xs">
+            <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b">
+              Ping File or Note (Type to filter)
+            </div>
+            {filteredFiles.length > 0 && (
+              <div className="py-1">
+                <div className="px-2 py-0.5 text-[9px] font-bold text-primary uppercase">Files</div>
+                {filteredFiles.slice(0, 5).map(f => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => insertPing('file', f.id, f.originalName || f.name)}
+                    className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-muted text-left transition-colors cursor-pointer"
+                  >
+                    <Paperclip className="w-3 h-3 text-primary shrink-0" />
+                    <span className="truncate flex-1 text-foreground">{f.originalName || f.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {filteredNotes.length > 0 && (
+              <div className="py-1 border-t">
+                <div className="px-2 py-0.5 text-[9px] font-bold text-amber-500 uppercase">Notes</div>
+                {filteredNotes.slice(0, 5).map(n => (
+                  <button
+                    key={n.id}
+                    type="button"
+                    onClick={() => insertPing('note', n.id, n.title)}
+                    className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-muted text-left transition-colors cursor-pointer"
+                  >
+                    <FileText className="w-3 h-3 text-amber-500 shrink-0" />
+                    <span className="truncate flex-1 text-foreground">{n.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Helper Toolbar: Quick Ping Buttons */}
+      <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1 select-none">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={disabled || projectFiles.length === 0}
+            onClick={() => { setShowPicker(showPicker === 'file' ? null : 'file'); setPickerSearch('') }}
+            className="flex items-center gap-1 px-2 py-1 rounded bg-muted/60 hover:bg-muted text-foreground transition-colors cursor-pointer border border-border/50 disabled:opacity-40"
+            title="Ping a Project File in this comment"
+          >
+            <Paperclip className="w-3 h-3 text-primary" />
+            <span>Ping File</span>
+          </button>
+          <button
+            type="button"
+            disabled={disabled || projectNotes.length === 0}
+            onClick={() => { setShowPicker(showPicker === 'note' ? null : 'note'); setPickerSearch('') }}
+            className="flex items-center gap-1 px-2 py-1 rounded bg-muted/60 hover:bg-muted text-foreground transition-colors cursor-pointer border border-border/50 disabled:opacity-40"
+            title="Ping a Project Note in this comment"
+          >
+            <FileText className="w-3 h-3 text-amber-500" />
+            <span>Ping Note</span>
+          </button>
+        </div>
+        <span className="text-[10px] text-muted-foreground/70 hidden sm:inline">
+          Tip: type <strong className="text-foreground">@</strong> or <strong className="text-foreground">[</strong> to ping
+        </span>
+      </div>
+
+      {/* Modal / Popover Picker */}
+      {showPicker && (
+        <div className="p-3 bg-card border rounded-xl shadow-lg mt-1 space-y-2 animate-scale-in">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-foreground">
+              Select {showPicker === 'file' ? 'File' : 'Note'} to Ping:
+            </span>
+            <button type="button" onClick={() => setShowPicker(null)} className="p-0.5 text-muted-foreground hover:text-foreground">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <input
+            type="text"
+            autoFocus
+            value={pickerSearch}
+            onChange={(e) => setPickerSearch(e.target.value)}
+            placeholder={`Search ${showPicker === 'file' ? 'files' : 'notes'}...`}
+            className="w-full px-2.5 py-1 text-xs rounded border bg-background outline-none focus:border-primary text-foreground"
+          />
+          <div className="max-h-40 overflow-y-auto divide-y divide-border">
+            {showPicker === 'file' ? (
+              filteredFiles.length === 0 ? (
+                <div className="text-center py-4 text-xs text-muted-foreground">No matching files found.</div>
+              ) : (
+                filteredFiles.map(f => (
+                  <div
+                    key={f.id}
+                    onClick={() => insertPing('file', f.id, f.originalName || f.name)}
+                    className="flex items-center justify-between p-2 hover:bg-muted/50 rounded cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <Paperclip className="w-3.5 h-3.5 text-primary shrink-0" />
+                      <span className="text-xs text-foreground font-medium truncate">{f.originalName || f.name}</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground font-mono">Insert</span>
+                  </div>
+                ))
+              )
+            ) : (
+              filteredNotes.length === 0 ? (
+                <div className="text-center py-4 text-xs text-muted-foreground">No matching notes found.</div>
+              ) : (
+                filteredNotes.map(n => (
+                  <div
+                    key={n.id}
+                    onClick={() => insertPing('note', n.id, n.title)}
+                    className="flex items-center justify-between p-2 hover:bg-muted/50 rounded cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <FileText className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <span className="text-xs text-foreground font-medium truncate">{n.title}</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground font-mono">Insert</span>
+                  </div>
+                ))
+              )
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Component to Render Comment with Interactive Ping Pills ──────────────────────
+function RenderComment({
+  text,
+  onOpenFile,
+  onOpenNote
+}: {
+  text: string
+  onOpenFile: (id: string, name: string) => void
+  onOpenNote: (id: string, title: string) => void
+}) {
+  if (!text) return null
+  const regex = /@\[(file|note):([^:]+):([^\]]+)\]/g
+  const parts: React.ReactNode[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.substring(lastIndex, match.index))
+    }
+    const type = match[1]
+    const id = match[2]
+    const label = match[3]
+
+    if (type === 'file') {
+      parts.push(
+        <button
+          key={`${match.index}-${id}`}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onOpenFile(id, label)
+          }}
+          className="inline-flex items-center gap-1 px-2 py-0.5 mx-1 rounded-md bg-primary/10 text-primary border border-primary/20 text-xs font-semibold hover:bg-primary/20 transition-colors cursor-pointer select-none align-middle not-italic shadow-xs"
+          title={`Click to preview or download file "${label}"`}
+        >
+          <Paperclip className="w-3 h-3 text-primary shrink-0" />
+          <span className="truncate max-w-[170px]">{label}</span>
+        </button>
+      )
+    } else {
+      parts.push(
+        <button
+          key={`${match.index}-${id}`}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onOpenNote(id, label)
+          }}
+          className="inline-flex items-center gap-1 px-2 py-0.5 mx-1 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-semibold hover:bg-amber-500/20 transition-colors cursor-pointer select-none align-middle not-italic shadow-xs"
+          title={`Click to view note "${label}"`}
+        >
+          <FileText className="w-3 h-3 text-amber-500 shrink-0" />
+          <span className="truncate max-w-[170px]">{label}</span>
+        </button>
+      )
+    }
+    lastIndex = match.index + match[0].length
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex))
+  }
+
+  return <span>{parts}</span>
 }
 
 export function ApprovalsTab({ projectId, isReadOnly }: ApprovalsTabProps) {
@@ -32,6 +337,99 @@ export function ApprovalsTab({ projectId, isReadOnly }: ApprovalsTabProps) {
   const [actionType, setActionType] = useState<'approve' | 'reject' | 'changes' | 'resubmit' | 'pending' | 'request_approval' | null>(null)
   const [commentText, setCommentText] = useState('')
   const [isSubmittingAction, setIsSubmittingAction] = useState(false)
+
+  // Project Files & Notes for Pinging
+  const [projectFiles, setProjectFiles] = useState<any[]>([])
+  const [projectNotes, setProjectNotes] = useState<any[]>([])
+
+  // Pinned Resources per Deliverable State
+  const [pinnedResources, setPinnedResources] = useState<PinnedResource[]>([])
+  const [showAddPinnedModal, setShowAddPinnedModal] = useState(false)
+  const [pinnedModalTab, setPinnedModalTab] = useState<'file' | 'note'>('file')
+  const [pinnedSearch, setPinnedSearch] = useState('')
+
+  // Modals for Note & File Preview
+  const [previewingNote, setPreviewingNote] = useState<any | null>(null)
+  const [previewingFile, setPreviewingFile] = useState<{ id: string; name: string; mimeType: string; data?: string } | null>(null)
+
+  // Load project files and notes
+  useEffect(() => {
+    Promise.all([
+      window.api.files.getByProject(projectId),
+      window.api.notes.getByProject(projectId)
+    ]).then(([filesData, notesData]) => {
+      setProjectFiles(filesData || [])
+      setProjectNotes(notesData || [])
+    }).catch(() => {})
+  }, [projectId])
+
+  // Load pinned resources from localStorage
+  useEffect(() => {
+    if (!selectedDeliverableId) {
+      setPinnedResources([])
+      return
+    }
+    try {
+      const saved = localStorage.getItem(`pwm_approval_pinned_${selectedDeliverableId}`)
+      if (saved) {
+        setPinnedResources(JSON.parse(saved))
+      } else {
+        setPinnedResources([])
+      }
+    } catch {
+      setPinnedResources([])
+    }
+  }, [selectedDeliverableId])
+
+  const savePinnedResources = (newList: PinnedResource[]) => {
+    setPinnedResources(newList)
+    if (selectedDeliverableId) {
+      try {
+        localStorage.setItem(`pwm_approval_pinned_${selectedDeliverableId}`, JSON.stringify(newList))
+      } catch {}
+    }
+  }
+
+  const handleAddPinned = (type: 'file' | 'note', refId: string, name: string) => {
+    if (pinnedResources.some(r => r.refId === refId)) return
+    const updated = [...pinnedResources, { id: `pin_${Date.now()}`, type, refId, name }]
+    savePinnedResources(updated)
+    setShowAddPinnedModal(false)
+    setPinnedSearch('')
+  }
+
+  const handleRemovePinned = (id: string) => {
+    const updated = pinnedResources.filter(r => r.id !== id)
+    savePinnedResources(updated)
+  }
+
+  // Open / Preview Handlers
+  const handleOpenFile = async (fileId: string, fileName: string) => {
+    try {
+      const ext = fileName.split('.').pop()?.toLowerCase() || ''
+      if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(ext)) {
+        try {
+          const buf = await window.api.files.getBuffer(fileId)
+          if (buf && buf.data) {
+            setPreviewingFile({ id: fileId, name: fileName, mimeType: buf.mimeType || 'image/png', data: buf.data })
+            return
+          }
+        } catch {}
+      }
+      await window.api.files.download(fileId)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleOpenNote = (noteId: string, noteTitle: string) => {
+    const note = projectNotes.find(n => n.id === noteId || n.title.toLowerCase() === noteTitle.toLowerCase())
+    if (note) {
+      setPreviewingNote(note)
+    } else {
+      setPreviewingNote({ id: noteId, title: noteTitle, content: 'Note content unavailable or deleted.', createdAt: '' })
+    }
+  }
 
   // Feedback comment editing state
   const [editingApprovalId, setEditingApprovalId] = useState<string | null>(null)
@@ -78,7 +476,7 @@ export function ApprovalsTab({ projectId, isReadOnly }: ApprovalsTabProps) {
     }
   }, [selectedDeliverableId])
 
-  // Adjust preview index if files change (e.g. when a file is removed)
+  // Adjust preview index if files change
   useEffect(() => {
     if (files.length === 0) {
       setActivePreviewIdx(null)
@@ -115,19 +513,10 @@ export function ApprovalsTab({ projectId, isReadOnly }: ApprovalsTabProps) {
     }
   }, [selectedDeliverableId, fetchApprovals])
 
-
-
-  // Get the latest approval record (if any)
+  // Get the latest approval record
   const latestApproval = useMemo(() => {
     if (!approvals || approvals.length === 0) return null
     return approvals[0]
-  }, [approvals])
-
-  // Check if there is a pending approval for the selected deliverable
-  const activePendingApproval = useMemo(() => {
-    if (!approvals || approvals.length === 0) return null
-    const latest = approvals[0]
-    return latest.status === 'pending' ? latest : null
   }, [approvals])
 
   // Action submission handler
@@ -155,7 +544,6 @@ export function ApprovalsTab({ projectId, isReadOnly }: ApprovalsTabProps) {
           await markPendingDeliverable(latestApproval.id, commentText)
         }
       }
-      // Reset state and reload
       setActionType(null)
       setCommentText('')
       await fetchDeliverables(projectId)
@@ -348,7 +736,7 @@ export function ApprovalsTab({ projectId, isReadOnly }: ApprovalsTabProps) {
                           <MessageSquare className="w-4 h-4" />
                           <span>Attached Files for Review ({files.length})</span>
                         </div>
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {/* File list */}
                           <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
@@ -454,6 +842,87 @@ export function ApprovalsTab({ projectId, isReadOnly }: ApprovalsTabProps) {
                     )
                   })()}
 
+                  {/* ─── Pinned / Linked Resources (Files & Notes) Section ──────── */}
+                  <div className="p-4 bg-muted/15 rounded-xl border border-border space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wider select-none">
+                        <Pin className="w-3.5 h-3.5 text-primary rotate-45" />
+                        <span>Pinged / Linked Resources ({pinnedResources.length})</span>
+                      </div>
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAddPinnedModal(true)}
+                          className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" /> Pin File or Note
+                        </button>
+                      )}
+                    </div>
+
+                    {pinnedResources.length === 0 ? (
+                      <div className="text-xs text-muted-foreground/70 py-2 italic flex items-center justify-between">
+                        <span>No project files or notes linked to this approval yet.</span>
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAddPinnedModal(true)}
+                            className="px-2.5 py-1 text-xs rounded-lg border bg-card hover:bg-muted text-foreground transition-colors cursor-pointer"
+                          >
+                            + Add Link
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                        {pinnedResources.map(res => (
+                          <div
+                            key={res.id}
+                            onClick={() => {
+                              if (res.type === 'file') handleOpenFile(res.refId, res.name)
+                              else handleOpenNote(res.refId, res.name)
+                            }}
+                            className={cn(
+                              "flex items-center justify-between p-2.5 rounded-lg border bg-card hover:shadow-xs transition-all cursor-pointer group select-none",
+                              res.type === 'file' ? "border-primary/20 hover:border-primary/50" : "border-amber-500/20 hover:border-amber-500/50"
+                            )}
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              {res.type === 'file' ? (
+                                <Paperclip className="w-3.5 h-3.5 text-primary shrink-0" />
+                              ) : (
+                                <FileText className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                              )}
+                              <span className="text-xs font-semibold text-foreground truncate" title={res.name}>
+                                {res.name}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0 ml-2">
+                              <span className="text-[10px] text-muted-foreground opacity-60 group-hover:opacity-100">
+                                {res.type === 'file' ? 'View/DL' : 'Read'}
+                              </span>
+                              {!isReadOnly && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleRemovePinned(res.id)
+                                  }}
+                                  className="p-1 rounded text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                                  title="Unpin"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ─── Approval Audit Log ──────────────────────────────────── */}
                   <div>
                     <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-1.5">
                       <History className="w-3.5 h-3.5" />
@@ -470,7 +939,7 @@ export function ApprovalsTab({ projectId, isReadOnly }: ApprovalsTabProps) {
                       </div>
                     ) : (
                       <div className="relative border-l border-border pl-6 ml-3 space-y-6">
-                        {approvals.map((appr, idx) => (
+                        {approvals.map((appr) => (
                           <div key={appr.id} className="relative">
                             {/* Point Icon */}
                             <div className="absolute -left-[33px] top-0.5 w-6 h-6 rounded-full bg-card border flex items-center justify-center shadow-sm">
@@ -517,12 +986,13 @@ export function ApprovalsTab({ projectId, isReadOnly }: ApprovalsTabProps) {
 
                               {editingApprovalId === appr.id ? (
                                 <div className="mt-2 space-y-2 select-text">
-                                  <textarea
-                                    rows={2}
+                                  <CommentInputWithPings
                                     value={editingCommentText}
-                                    onChange={(e) => setEditingCommentText(e.target.value)}
-                                    className="w-full px-3 py-1.5 rounded-lg border bg-background text-xs outline-none focus:border-primary transition-all resize-none animate-fade-in"
-                                    placeholder="Enter feedback comment..."
+                                    onChange={setEditingCommentText}
+                                    placeholder="Enter feedback comment... Use @ or [ to ping files & notes"
+                                    projectFiles={projectFiles}
+                                    projectNotes={projectNotes}
+                                    minRows={3}
                                   />
                                   <div className="flex gap-2 justify-end">
                                     <button
@@ -543,7 +1013,13 @@ export function ApprovalsTab({ projectId, isReadOnly }: ApprovalsTabProps) {
                                 appr.comment ? (
                                   <div className="p-3 bg-muted/40 rounded-lg border text-xs text-foreground italic flex gap-1.5 items-start">
                                     <CornerDownRight className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
-                                    <span>"{appr.comment}"</span>
+                                    <div className="leading-relaxed">
+                                      <RenderComment
+                                        text={appr.comment}
+                                        onOpenFile={handleOpenFile}
+                                        onOpenNote={handleOpenNote}
+                                      />
+                                    </div>
                                   </div>
                                 ) : (
                                   !isReadOnly && (
@@ -554,7 +1030,7 @@ export function ApprovalsTab({ projectId, isReadOnly }: ApprovalsTabProps) {
                                       }}
                                       className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline bg-transparent border-none cursor-pointer mt-1.5"
                                     >
-                                      <Plus className="w-3 h-3" /> Add Feedback Comment
+                                      <Plus className="w-3 h-3" /> Add Feedback Comment (Ping Files & Notes)
                                     </button>
                                   )
                                 )
@@ -576,11 +1052,210 @@ export function ApprovalsTab({ projectId, isReadOnly }: ApprovalsTabProps) {
         </div>
       )}
 
-      {/* Action Dialog Modal (Approve / Reject / Changes / Resubmit / Pending / Request Approval) */}
+      {/* ─── Add Pinned Resource Modal ────────────────────────────────────────── */}
+      {showAddPinnedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowAddPinnedModal(false)} />
+          <div className="relative w-full max-w-md bg-card rounded-2xl border shadow-2xl p-5 overflow-hidden animate-scale-in">
+            <div className="flex items-center justify-between pb-3 border-b">
+              <h3 className="text-sm font-bold text-foreground">Pin / Link File or Note to Review</h3>
+              <button onClick={() => setShowAddPinnedModal(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex gap-2 my-3 border-b pb-2">
+              <button
+                type="button"
+                onClick={() => { setPinnedModalTab('file'); setPinnedSearch('') }}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer",
+                  pinnedModalTab === 'file' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                )}
+              >
+                <Paperclip className="w-3.5 h-3.5" /> Files ({projectFiles.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => { setPinnedModalTab('note'); setPinnedSearch('') }}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer",
+                  pinnedModalTab === 'note' ? "bg-amber-500 text-white" : "text-muted-foreground hover:bg-muted"
+                )}
+              >
+                <FileText className="w-3.5 h-3.5" /> Notes ({projectNotes.length})
+              </button>
+            </div>
+
+            <input
+              type="text"
+              autoFocus
+              value={pinnedSearch}
+              onChange={(e) => setPinnedSearch(e.target.value)}
+              placeholder={`Search ${pinnedModalTab === 'file' ? 'files' : 'notes'}...`}
+              className="w-full px-3 py-2 rounded-lg border bg-background text-xs outline-none focus:border-primary text-foreground mb-3"
+            />
+
+            <div className="max-h-60 overflow-y-auto space-y-1">
+              {pinnedModalTab === 'file' ? (
+                projectFiles.filter(f => (f.originalName || f.name || '').toLowerCase().includes(pinnedSearch.toLowerCase())).length === 0 ? (
+                  <div className="text-center py-6 text-xs text-muted-foreground">No files found in this workspace.</div>
+                ) : (
+                  projectFiles
+                    .filter(f => (f.originalName || f.name || '').toLowerCase().includes(pinnedSearch.toLowerCase()))
+                    .map(f => {
+                      const isPinned = pinnedResources.some(r => r.refId === f.id)
+                      return (
+                        <div
+                          key={f.id}
+                          onClick={() => !isPinned && handleAddPinned('file', f.id, f.originalName || f.name)}
+                          className={cn(
+                            "flex items-center justify-between p-2.5 rounded-lg text-xs transition-colors select-none",
+                            isPinned ? "opacity-50 bg-muted/20 cursor-default" : "hover:bg-muted/60 cursor-pointer text-foreground"
+                          )}
+                        >
+                          <div className="flex items-center gap-2 truncate flex-1">
+                            <Paperclip className="w-3.5 h-3.5 text-primary shrink-0" />
+                            <span className="truncate font-medium">{f.originalName || f.name}</span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground shrink-0 ml-2">
+                            {isPinned ? 'Already Pinned' : '+ Pin'}
+                          </span>
+                        </div>
+                      )
+                    })
+                )
+              ) : (
+                projectNotes.filter(n => (n.title || '').toLowerCase().includes(pinnedSearch.toLowerCase())).length === 0 ? (
+                  <div className="text-center py-6 text-xs text-muted-foreground">No notes found in this workspace.</div>
+                ) : (
+                  projectNotes
+                    .filter(n => (n.title || '').toLowerCase().includes(pinnedSearch.toLowerCase()))
+                    .map(n => {
+                      const isPinned = pinnedResources.some(r => r.refId === n.id)
+                      return (
+                        <div
+                          key={n.id}
+                          onClick={() => !isPinned && handleAddPinned('note', n.id, n.title)}
+                          className={cn(
+                            "flex items-center justify-between p-2.5 rounded-lg text-xs transition-colors select-none",
+                            isPinned ? "opacity-50 bg-muted/20 cursor-default" : "hover:bg-muted/60 cursor-pointer text-foreground"
+                          )}
+                        >
+                          <div className="flex items-center gap-2 truncate flex-1">
+                            <FileText className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            <span className="truncate font-medium">{n.title}</span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground shrink-0 ml-2">
+                            {isPinned ? 'Already Pinned' : '+ Pin'}
+                          </span>
+                        </div>
+                      )
+                    })
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Preview Note Modal ─────────────────────────────────────────────────── */}
+      {previewingNote && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setPreviewingNote(null)} />
+          <div className="relative w-full max-w-xl bg-card rounded-2xl border shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-scale-in">
+            <div className="p-5 border-b bg-muted/20 flex items-start justify-between">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
+                  <StickyNote className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold text-foreground truncate">{previewingNote.title}</h3>
+                  {previewingNote.createdAt && (
+                    <span className="text-[10px] text-muted-foreground">{formatDateTime(previewingNote.createdAt)}</span>
+                  )}
+                </div>
+              </div>
+              <button onClick={() => setPreviewingNote(null)} className="text-muted-foreground hover:text-foreground p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 text-sm text-foreground space-y-4">
+              <div
+                className="prose prose-sm dark:prose-invert max-w-none leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: previewingNote.content || '<em>(Empty note content)</em>' }}
+              />
+            </div>
+
+            <div className="p-4 border-t bg-muted/20 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.setItem('workspace:target-note-id', previewingNote.id)
+                  window.dispatchEvent(new CustomEvent('workspace:switch-tab', { detail: { tabId: 'notes' } }))
+                  setPreviewingNote(null)
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> Open in Notes Tab
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewingNote(null)}
+                className="px-4 py-1.5 text-xs font-semibold rounded-lg border hover:bg-muted text-foreground transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Preview Image File Modal ────────────────────────────────────────── */}
+      {previewingFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setPreviewingFile(null)} />
+          <div className="relative w-full max-w-2xl bg-card rounded-2xl border shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-scale-in">
+            <div className="p-4 border-b flex items-center justify-between bg-muted/20">
+              <div className="flex items-center gap-2 truncate">
+                <Paperclip className="w-4 h-4 text-primary shrink-0" />
+                <span className="text-sm font-bold text-foreground truncate">{previewingFile.name}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.api.files.download(previewingFile.id)}
+                  className="px-3 py-1 bg-primary text-primary-foreground text-xs font-medium rounded-lg hover:bg-primary/95 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download
+                </button>
+                <button onClick={() => setPreviewingFile(null)} className="text-muted-foreground hover:text-foreground p-1">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 flex items-center justify-center overflow-auto bg-muted/10 min-h-[300px]">
+              {previewingFile.data ? (
+                <img
+                  src={`data:${previewingFile.mimeType};base64,${previewingFile.data}`}
+                  alt={previewingFile.name}
+                  className="max-w-full max-h-[60vh] object-contain rounded-lg border bg-white shadow-sm"
+                />
+              ) : (
+                <div className="text-center text-xs text-muted-foreground">Preview not available</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Action Dialog Modal (Approve / Reject / Changes / Resubmit / Pending / Request Approval) ─── */}
       {actionType && selectedDeliverable && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setActionType(null)} />
-          <div className="relative w-full max-w-md mx-4 bg-card rounded-xl border shadow-2xl p-6 animate-scale-in">
+          <div className="relative w-full max-w-lg mx-4 bg-card rounded-2xl border shadow-2xl p-6 animate-scale-in">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-bold text-foreground">
@@ -615,26 +1290,27 @@ export function ApprovalsTab({ projectId, isReadOnly }: ApprovalsTabProps) {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">
-                  Comment / Message {actionType === 'changes' && <span className="text-destructive">*</span>}
+                  Feedback Comment / Message {actionType === 'changes' && <span className="text-destructive">*</span>}
                 </label>
-                <textarea
-                  rows={4}
+                <CommentInputWithPings
                   value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
+                  onChange={setCommentText}
                   placeholder={
                     actionType === 'approve'
                       ? 'e.g. Deliverable looks great and approved!'
                       : actionType === 'changes'
-                        ? 'e.g. Please increase the font size and make the header logo wider...'
+                        ? 'e.g. Please check the pinged file and note revisions...'
                         : actionType === 'reject'
                           ? 'e.g. This layout does not meet the guidelines. Need total rework...'
                           : actionType === 'pending'
                             ? 'e.g. Resetting status back to pending for review...'
                             : actionType === 'request_approval'
                               ? 'e.g. Please review the design changes for this deliverable...'
-                              : 'e.g. New design revisions implemented to address feedback...'
+                              : 'e.g. New revisions implemented to address feedback...'
                   }
-                  className="w-full px-3 py-2 rounded-lg border bg-background text-sm outline-none focus:border-primary transition-all resize-none"
+                  projectFiles={projectFiles}
+                  projectNotes={projectNotes}
+                  minRows={4}
                 />
               </div>
 

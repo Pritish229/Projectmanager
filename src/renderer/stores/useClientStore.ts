@@ -1,5 +1,25 @@
 import { create } from 'zustand'
 
+export interface ClientAddress {
+  id: string
+  label: string
+  street?: string
+  city?: string
+  state?: string
+  pincode?: string
+  country?: string
+  isPrimary?: boolean
+}
+
+export interface ClientContact {
+  id: string
+  name: string
+  role?: string
+  email?: string
+  phone?: string
+  isPrimary?: boolean
+}
+
 export interface Client {
   id: string
   name: string
@@ -7,10 +27,28 @@ export interface Client {
   email: string
   phone: string
   status: string // active, inactive
+  gstNo?: string
+  panNo?: string
+  website?: string
+  notes?: string
+  currency?: string
+  addresses?: string
+  contacts?: string
   createdAt: string
   _count?: {
     projects: number
+    collaborations?: number
   }
+  collaborations?: {
+    id: string
+    role: string
+    project: {
+      id: string
+      name: string
+      code: string
+      status: string
+    }
+  }[]
 }
 
 interface ClientState {

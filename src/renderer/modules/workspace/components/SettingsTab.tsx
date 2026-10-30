@@ -23,7 +23,10 @@ import {
   Calendar,
   X,
   AlertTriangle,
-  Mail
+  Mail,
+  Users,
+  Plus,
+  UserPlus
 } from 'lucide-react'
 
 interface SettingsTabProps {
@@ -51,7 +54,18 @@ interface SettingsTabProps {
 
 export function SettingsTab({ project }: SettingsTabProps) {
   const navigate = useNavigate()
-  const { updateProject, deleteProject, archiveProject, unarchiveProject, closeProject, reopenProject } = useProjectStore()
+  const {
+    currentProject,
+    updateProject,
+    deleteProject,
+    archiveProject,
+    unarchiveProject,
+    closeProject,
+    reopenProject,
+    addCollaborator,
+    removeCollaborator,
+    updateCollaboratorRole
+  } = useProjectStore()
   const { clients: allClients, fetchClients } = useClientStore()
 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -63,6 +77,13 @@ export function SettingsTab({ project }: SettingsTabProps) {
   const [selectedClientId, setSelectedClientId] = useState<string>('')
   const [clientSearchQuery, setClientSearchQuery] = useState('')
   const [showClientDropdown, setShowClientDropdown] = useState(false)
+
+  // Project Collaboration State (Multiple Clients)
+  const collaborators = currentProject?.collaborators || (project as any).collaborators || []
+  const [showAddCollabModal, setShowAddCollabModal] = useState(false)
+  const [collabClientId, setCollabClientId] = useState('')
+  const [collabRole, setCollabRole] = useState('Client Partner')
+  const [collabSearch, setCollabSearch] = useState('')
 
   // Email profile state
   const { profileStatuses, fetchStatuses } = useEmailTemplateStore()
@@ -359,6 +380,92 @@ export function SettingsTab({ project }: SettingsTabProps) {
                 </div>
               </div>
 
+              {/* Project Collaboration (Multiple Clients) */}
+              <div className="border-t border-border pt-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <Users className="w-4 h-4 text-primary" />
+                      Project Collaboration (Multiple Clients)
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Enable multi-client collaboration where multiple companies or client stakeholders share access to this project.
+                    </p>
+                  </div>
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddCollabModal(true)
+                        setCollabClientId('')
+                        setCollabRole('Client Partner')
+                        setCollabSearch('')
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      Add Collaborating Client
+                    </button>
+                  )}
+                </div>
+
+                {collaborators.length === 0 ? (
+                  <div className="p-4 border border-dashed rounded-xl bg-muted/10 text-xs text-muted-foreground flex items-center justify-between">
+                    <span>No secondary collaborating clients linked. Click &quot;Add Collaborating Client&quot; to invite partner clients.</span>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {collaborators.map((collab: any) => (
+                      <div
+                        key={collab.id}
+                        className="p-3 rounded-xl border bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                            {collab.client?.name?.slice(0, 2).toUpperCase() || 'CL'}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-xs text-foreground truncate">{collab.client?.name}</div>
+                            {collab.client?.company && (
+                              <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                <Building2 className="w-3 h-3 text-muted-foreground/70" />
+                                <span className="truncate">{collab.client.company}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5">
+                          <select
+                            disabled={isReadOnly}
+                            value={collab.role}
+                            onChange={(e) => updateCollaboratorRole(project.id, collab.clientId, e.target.value)}
+                            className="px-2.5 py-1 text-xs rounded-lg border bg-background text-foreground outline-none cursor-pointer focus:border-primary disabled:opacity-50"
+                          >
+                            <option value="Client Partner">Client Partner</option>
+                            <option value="Co-Owner">Co-Owner</option>
+                            <option value="Reviewer / Approver">Reviewer / Approver</option>
+                            <option value="Stakeholder">Stakeholder</option>
+                            <option value="Technical Consultant">Technical Consultant</option>
+                          </select>
+
+                          {!isReadOnly && (
+                            <button
+                              type="button"
+                              onClick={() => removeCollaborator(project.id, collab.clientId)}
+                              className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-muted transition-colors cursor-pointer"
+                              title="Remove Collaborator"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="border-t border-border pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1.5">Start Date</label>
@@ -560,6 +667,105 @@ export function SettingsTab({ project }: SettingsTabProps) {
         confirmLabel="Yes, Delete Project"
         variant="danger"
       />
+
+      {/* Add Collaborator Modal */}
+      {showAddCollabModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowAddCollabModal(false)} />
+          <div className="relative w-full max-w-md bg-card rounded-2xl border shadow-2xl p-5 overflow-hidden animate-scale-in">
+            <div className="flex items-center justify-between pb-3 border-b">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" />
+                <h3 className="text-sm font-bold text-foreground">Add Collaborating Client</h3>
+              </div>
+              <button onClick={() => setShowAddCollabModal(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="py-4 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">Collaboration Role</label>
+                <select
+                  value={collabRole}
+                  onChange={(e) => setCollabRole(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border bg-background text-xs outline-none focus:border-primary text-foreground cursor-pointer"
+                >
+                  <option value="Client Partner">Client Partner</option>
+                  <option value="Co-Owner">Co-Owner</option>
+                  <option value="Reviewer / Approver">Reviewer / Approver</option>
+                  <option value="Stakeholder">Stakeholder</option>
+                  <option value="Technical Consultant">Technical Consultant</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">Select Client</label>
+                <input
+                  type="text"
+                  value={collabSearch}
+                  onChange={(e) => setCollabSearch(e.target.value)}
+                  placeholder="Search clients..."
+                  className="w-full px-3 py-1.5 rounded-lg border bg-background text-xs outline-none focus:border-primary text-foreground mb-2"
+                />
+
+                <div className="max-h-48 overflow-y-auto divide-y divide-border border rounded-lg bg-card">
+                  {allClients
+                    .filter(c => {
+                      const matchesSearch = c.name.toLowerCase().includes(collabSearch.toLowerCase()) ||
+                        (c.company || '').toLowerCase().includes(collabSearch.toLowerCase())
+                      const isPrimary = c.id === (project.clientId || selectedClientId)
+                      const isAlreadyCollab = collaborators.some((col: any) => col.clientId === c.id)
+                      return matchesSearch && !isPrimary && !isAlreadyCollab
+                    })
+                    .map(c => (
+                      <div
+                        key={c.id}
+                        onClick={() => setCollabClientId(c.id)}
+                        className={cn(
+                          "p-2.5 text-xs flex items-center justify-between cursor-pointer hover:bg-muted/60 transition-colors",
+                          collabClientId === c.id && "bg-primary/10 text-primary font-bold"
+                        )}
+                      >
+                        <div>
+                          <div className="font-medium text-foreground">{c.name}</div>
+                          {c.company && <div className="text-[10px] text-muted-foreground">{c.company}</div>}
+                        </div>
+                        {collabClientId === c.id && (
+                          <span className="text-[10px] text-primary font-bold">Selected</span>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setShowAddCollabModal(false)}
+                className="px-3 py-1.5 text-xs rounded-lg border hover:bg-muted cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!collabClientId}
+                onClick={async () => {
+                  if (collabClientId) {
+                    await addCollaborator(project.id, collabClientId, collabRole)
+                    setShowAddCollabModal(false)
+                    setCollabClientId('')
+                  }
+                }}
+                className="px-4 py-1.5 text-xs font-bold rounded-lg bg-primary text-primary-foreground hover:bg-primary/95 disabled:opacity-50 cursor-pointer"
+              >
+                Add Collaborator
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -7,7 +7,7 @@ import { cn, formatDate } from '@/lib/utils'
 import {
   LayoutDashboard, ListTodo, FileText, CheckSquare, FolderOpen,
   StickyNote, Clock, Activity, Settings, Lock,
-  Building2, Calendar, Mail, Phone, ArrowLeft, Receipt
+  Building2, Calendar, Mail, Phone, ArrowLeft, Receipt, Users
 } from 'lucide-react'
 import { TodosTab } from '../components/TodosTab'
 import { NotesTab } from '../components/NotesTab'
@@ -107,6 +107,16 @@ export function WorkspacePage() {
                   <Building2 className="w-3 h-3" />
                   {currentProject.client.name}
                   {currentProject.client.company && ` · ${currentProject.client.company}`}
+                </span>
+              )}
+              {currentProject.collaborators && currentProject.collaborators.length > 0 && (
+                <span
+                  onClick={() => handleTabChange('settings')}
+                  className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 font-medium cursor-pointer hover:bg-indigo-500/20 transition-colors"
+                  title={`Collaborating Clients: ${currentProject.collaborators.map(c => `${c.client.name} (${c.role})`).join(', ')}`}
+                >
+                  <Users className="w-3 h-3" />
+                  <span>{currentProject.collaborators.length} Client Partner{currentProject.collaborators.length > 1 ? 's' : ''}</span>
                 </span>
               )}
               {currentProject.deadline && (

@@ -11,13 +11,22 @@ interface UIState {
   applyTheme: (theme: 'light' | 'dark' | 'system') => void
 }
 
+const initialCollapsed = typeof window !== 'undefined' ? localStorage.getItem('pwm_sidebar_collapsed') === 'true' : false
+
 export const useUIStore = create<UIState>((set) => ({
-  sidebarCollapsed: false,
+  sidebarCollapsed: initialCollapsed,
   theme: 'system',
   globalSearch: '',
 
-  toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
-  setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+  toggleSidebar: () => set((state) => {
+    const next = !state.sidebarCollapsed
+    try { localStorage.setItem('pwm_sidebar_collapsed', String(next)) } catch {}
+    return { sidebarCollapsed: next }
+  }),
+  setSidebarCollapsed: (collapsed) => {
+    try { localStorage.setItem('pwm_sidebar_collapsed', String(collapsed)) } catch {}
+    set({ sidebarCollapsed: collapsed })
+  },
 
   setTheme: (theme) => {
     set({ theme })

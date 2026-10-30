@@ -22,7 +22,10 @@ export function registerProjectHandlers(): void {
     else where.archived = false
 
     if (filters?.clientId) {
-      where.clientId = filters.clientId
+      where.OR = [
+        { clientId: filters.clientId },
+        { collaborators: { some: { clientId: filters.clientId } } }
+      ]
     }
 
     if (filters?.startDateRange || filters?.endDateRange) {
@@ -47,7 +50,12 @@ export function registerProjectHandlers(): void {
 
     return prisma.project.findMany({
       where,
-      include: { client: true },
+      include: {
+        client: true,
+        collaborators: {
+          include: { client: true }
+        }
+      },
       orderBy: { updatedAt: 'desc' }
     })
   })
@@ -58,6 +66,9 @@ export function registerProjectHandlers(): void {
       where: { id },
       include: {
         client: true,
+        collaborators: {
+          include: { client: true }
+        },
         todos: { orderBy: { sortOrder: 'asc' } },
         deliverables: { orderBy: { createdAt: 'desc' } },
         notes: { orderBy: { updatedAt: 'desc' } },
@@ -95,7 +106,12 @@ export function registerProjectHandlers(): void {
         status: data.status || 'draft',
         tags: data.tags || ''
       },
-      include: { client: true }
+      include: {
+        client: true,
+        collaborators: {
+          include: { client: true }
+        }
+      }
     })
 
     // Log activity
@@ -126,7 +142,12 @@ export function registerProjectHandlers(): void {
     const updated = await prisma.project.update({
       where: { id },
       data: data as Record<string, unknown>,
-      include: { client: true }
+      include: {
+        client: true,
+        collaborators: {
+          include: { client: true }
+        }
+      }
     })
 
     const user = await prisma.user.findFirst()
@@ -168,7 +189,12 @@ export function registerProjectHandlers(): void {
     return prisma.project.update({
       where: { id },
       data: { archived: true },
-      include: { client: true }
+      include: {
+        client: true,
+        collaborators: {
+          include: { client: true }
+        }
+      }
     })
   })
 
@@ -177,7 +203,12 @@ export function registerProjectHandlers(): void {
     const project = await prisma.project.update({
       where: { id },
       data: { status: 'closed' },
-      include: { client: true }
+      include: {
+        client: true,
+        collaborators: {
+          include: { client: true }
+        }
+      }
     })
 
     const user = await prisma.user.findFirst()
@@ -200,7 +231,12 @@ export function registerProjectHandlers(): void {
     const project = await prisma.project.update({
       where: { id },
       data: { status: 'active' },
-      include: { client: true }
+      include: {
+        client: true,
+        collaborators: {
+          include: { client: true }
+        }
+      }
     })
 
     const user = await prisma.user.findFirst()
@@ -216,5 +252,115 @@ export function registerProjectHandlers(): void {
     })
 
     return project
+  })
+
+  // ──────────────────────────────────────────────
+  // Project Collaboration Handlers (Multiple Clients)
+  // ──────────────────────────────────────────────
+
+  // Get Collaborators for a Project
+  ipcMain.handle('projects:getCollaborators', async (_, projectId: string) => {
+    return prisma.projectCollaborator.findMany({
+      where: { projectId },
+      include: { client: true },
+      orderBy: { createdAt: 'asc' }
+    })
+  })
+
+  // Add a Client as Collaborator to Project
+  ipcMain.handle('projects:addCollaborator', async (_, { projectId, clientId, role }: {
+    projectId: string
+    clientId: string
+    role?: string
+  }) => {
+    // Check if already collaborating
+    const existing = await prisma.projectCollaborator.findUnique({
+      where: {
+        projectId_clientId: { projectId, clientId }
+      }
+    })
+
+    if (existing) {
+      if (role && role !== existing.role) {
+        return prisma.projectCollaborator.update({
+          where: { id: existing.id },
+          data: { role },
+          include: { client: true }
+        })
+      }
+      return existing
+    }
+
+    const created = await prisma.projectCollaborator.create({
+      data: {
+        projectId,
+        clientId,
+        role: role || 'Collaborator'
+      },
+      include: { client: true }
+    })
+
+    const client = await prisma.client.findUnique({ where: { id: clientId } })
+    const user = await prisma.user.findFirst()
+    await prisma.activityLog.create({
+      data: {
+        projectId,
+        action: 'collaborator_added',
+        entity: 'project',
+        entityId: projectId,
+        message: `Client "${client?.name || 'Client'}" joined project as ${role || 'Collaborator'}`,
+        userId: user?.id
+      }
+    })
+
+    return created
+  })
+
+  // Remove a Collaborator from Project
+  ipcMain.handle('projects:removeCollaborator', async (_, { projectId, clientId }: {
+    projectId: string
+    clientId: string
+  }) => {
+    const existing = await prisma.projectCollaborator.findUnique({
+      where: {
+        projectId_clientId: { projectId, clientId }
+      },
+      include: { client: true }
+    })
+
+    if (existing) {
+      await prisma.projectCollaborator.delete({
+        where: { id: existing.id }
+      })
+
+      const user = await prisma.user.findFirst()
+      await prisma.activityLog.create({
+        data: {
+          projectId,
+          action: 'collaborator_removed',
+          entity: 'project',
+          entityId: projectId,
+          message: `Collaborator "${existing.client?.name || 'Client'}" removed from project`,
+          userId: user?.id
+        }
+      })
+    }
+
+    return { success: true }
+  })
+
+  // Update Collaborator Role
+  ipcMain.handle('projects:updateCollaboratorRole', async (_, { projectId, clientId, role }: {
+    projectId: string
+    clientId: string
+    role: string
+  }) => {
+    return prisma.projectCollaborator.update({
+      where: {
+        projectId_clientId: { projectId, clientId }
+      },
+      data: { role },
+      include: { client: true }
+    })
   })
 }

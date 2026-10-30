@@ -1042,40 +1042,7 @@ function ProjectSummaryTab({ projectId, projects, onEmailOpen, onSelectProject }
         </div>
       </div>
 
-      {/* Quick Project Switcher */}
-      {projects.length > 0 && (
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
-          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider shrink-0 mr-1">Switch:</span>
-          <button
-            type="button"
-            onClick={() => onSelectProject?.('all')}
-            className={cn(
-              'px-3 py-1 rounded-full border text-xs font-medium transition-all cursor-pointer shrink-0',
-              projectId === 'all'
-                ? 'bg-primary text-primary-foreground border-primary shadow-xs'
-                : 'bg-card text-muted-foreground hover:text-foreground hover:bg-muted/50 border-border'
-            )}
-          >
-            All Projects Portfolio
-          </button>
-          {projects.map(p => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => onSelectProject?.(p.id)}
-              className={cn(
-                'px-3 py-1 rounded-full border text-xs font-medium transition-all cursor-pointer shrink-0 flex items-center gap-1.5',
-                projectId === p.id
-                  ? 'bg-primary text-primary-foreground border-primary shadow-xs'
-                  : 'bg-card text-muted-foreground hover:text-foreground hover:bg-muted/50 border-border'
-              )}
-            >
-              <span className="font-mono text-[10px] opacity-80">{p.code}</span>
-              <span className="truncate max-w-[130px]">{p.name}</span>
-            </button>
-          ))}
-        </div>
-      )}
+
 
       {/* Overdue warning */}
       {todoStats.overdue > 0 && (
@@ -1150,6 +1117,24 @@ function ProjectSummaryTab({ projectId, projects, onEmailOpen, onSelectProject }
               <div className="flex items-start gap-2">
                 <span className="text-muted-foreground w-20 shrink-0">Client</span>
                 <span className="font-semibold">{client.name}</span>
+              </div>
+            )}
+            {project.collaborators && project.collaborators.length > 0 && (
+              <div className="flex items-start gap-2">
+                <span className="text-muted-foreground w-20 shrink-0">Collaborators</span>
+                <div className="flex flex-col gap-1 min-w-0 flex-1">
+                  {project.collaborators.map((c: any) => (
+                    <div key={c.id} className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-semibold text-foreground">{c.client?.name || 'Client'}</span>
+                      {c.client?.company && <span className="text-muted-foreground">({c.client.company})</span>}
+                      {c.role && (
+                        <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-medium border border-indigo-500/20">
+                          {c.role}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             <div className="flex items-start gap-2">

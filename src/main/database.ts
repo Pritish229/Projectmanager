@@ -180,6 +180,48 @@ export async function initDatabase(): Promise<void> {
       );
     `)
 
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "project_collaborators" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "projectId" TEXT NOT NULL,
+        "clientId" TEXT NOT NULL,
+        "role" TEXT NOT NULL DEFAULT 'Collaborator',
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY ("projectId") REFERENCES "projects" ("id") ON DELETE CASCADE,
+        FOREIGN KEY ("clientId") REFERENCES "clients" ("id") ON DELETE CASCADE,
+        UNIQUE("projectId", "clientId")
+      );
+    `)
+
+    // Ensure extended columns exist on clients table
+    try {
+      const clientCols = await prisma.$queryRawUnsafe<any[]>(`PRAGMA table_info("clients")`)
+      const colNames = Array.isArray(clientCols) ? clientCols.map((c: any) => c.name) : []
+      if (!colNames.includes('gstNo')) {
+        await prisma.$executeRawUnsafe(`ALTER TABLE "clients" ADD COLUMN "gstNo" TEXT NOT NULL DEFAULT ''`)
+      }
+      if (!colNames.includes('panNo')) {
+        await prisma.$executeRawUnsafe(`ALTER TABLE "clients" ADD COLUMN "panNo" TEXT NOT NULL DEFAULT ''`)
+      }
+      if (!colNames.includes('website')) {
+        await prisma.$executeRawUnsafe(`ALTER TABLE "clients" ADD COLUMN "website" TEXT NOT NULL DEFAULT ''`)
+      }
+      if (!colNames.includes('notes')) {
+        await prisma.$executeRawUnsafe(`ALTER TABLE "clients" ADD COLUMN "notes" TEXT NOT NULL DEFAULT ''`)
+      }
+      if (!colNames.includes('currency')) {
+        await prisma.$executeRawUnsafe(`ALTER TABLE "clients" ADD COLUMN "currency" TEXT NOT NULL DEFAULT ''`)
+      }
+      if (!colNames.includes('addresses')) {
+        await prisma.$executeRawUnsafe(`ALTER TABLE "clients" ADD COLUMN "addresses" TEXT NOT NULL DEFAULT '[]'`)
+      }
+      if (!colNames.includes('contacts')) {
+        await prisma.$executeRawUnsafe(`ALTER TABLE "clients" ADD COLUMN "contacts" TEXT NOT NULL DEFAULT '[]'`)
+      }
+    } catch (colErr) {
+      console.warn('[Database] Client table migration notice:', colErr)
+    }
+
     // Seed default user if none exists
     const userCount = await prisma.user.count()
     if (userCount === 0) {

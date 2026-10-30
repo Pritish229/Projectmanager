@@ -37,10 +37,18 @@ model Client {
   email     String   @default("")
   phone     String   @default("")
   status    String   @default("active") // active, inactive
+  gstNo     String   @default("")
+  panNo     String   @default("")
+  website   String   @default("")
+  notes     String   @default("")
+  currency  String   @default("")
+  addresses String   @default("[]") // JSON serialized array of ClientAddress
+  contacts  String   @default("[]") // JSON serialized array of ClientContact
   createdAt DateTime @default(now())
 
-  projects  Project[]
-  approvals Approval[]
+  projects       Project[]
+  collaborations ProjectCollaborator[]
+  approvals      Approval[]
 
   @@map("clients")
 }
@@ -64,7 +72,8 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  client       Client?       @relation(fields: [clientId], references: [id])
+  client        Client?               @relation(fields: [clientId], references: [id])
+  collaborators ProjectCollaborator[]
   user         User?         @relation(fields: [userId], references: [id])
   todos        Todo[]
   deliverables Deliverable[]
@@ -76,6 +85,23 @@ model Project {
   invoices     Invoice[]
 
   @@map("projects")
+}
+
+// ──────────────────────────────────────────────
+// Project Collaborators (Multiple Clients per Project)
+// ──────────────────────────────────────────────
+model ProjectCollaborator {
+  id        String   @id @default(uuid())
+  projectId String
+  clientId  String
+  role      String   @default("Collaborator") // "Co-Owner", "Client Partner", "Reviewer / Approver", "Stakeholder", "Consultant", "Collaborator"
+  createdAt DateTime @default(now())
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, clientId])
+  @@map("project_collaborators")
 }
 
 // ──────────────────────────────────────────────

@@ -11,7 +11,11 @@ const api = {
     delete: (id: string) => ipcRenderer.invoke('projects:delete', id),
     archive: (id: string) => ipcRenderer.invoke('projects:archive', id),
     close: (id: string) => ipcRenderer.invoke('projects:close', id),
-    reopen: (id: string) => ipcRenderer.invoke('projects:reopen', id)
+    reopen: (id: string) => ipcRenderer.invoke('projects:reopen', id),
+    getCollaborators: (projectId: string) => ipcRenderer.invoke('projects:getCollaborators', projectId),
+    addCollaborator: (projectId: string, clientId: string, role?: string) => ipcRenderer.invoke('projects:addCollaborator', { projectId, clientId, role }),
+    removeCollaborator: (projectId: string, clientId: string) => ipcRenderer.invoke('projects:removeCollaborator', { projectId, clientId }),
+    updateCollaboratorRole: (projectId: string, clientId: string, role: string) => ipcRenderer.invoke('projects:updateCollaboratorRole', { projectId, clientId, role })
   },
 
   // Clients
